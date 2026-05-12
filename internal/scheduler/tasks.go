@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"net/smtp"
 	"os"
 	"path/filepath"
@@ -103,7 +104,9 @@ func (t *Tasks) CacheEvictor(ctx context.Context) error {
 	return nil
 }
 
-// KoboSessionReaper marks expired kobo sessions and removes their disk files.
+// KoboSessionReaper marks expired kobo sessions and removes their disk
+// files. Also sweeps stray kepub temp files left in the cache dir from
+// failed/interrupted previous runs (older than 1h).
 func (t *Tasks) KoboSessionReaper(ctx context.Context) error {
 	expired, err := t.Store.ExpireStaleKoboSessions(ctx, time.Now())
 	if err != nil {
@@ -114,8 +117,32 @@ func (t *Tasks) KoboSessionReaper(ctx context.Context) error {
 			_ = os.Remove(k.SourcePath)
 		}
 	}
+	// Sweep stray .kepub.epub files older than 1h from the cache dir.
+	if t.CacheDir != "" {
+		cutoff := time.Now().Add(-1 * time.Hour)
+		_ = filepath.WalkDir(t.CacheDir, func(p string, d osDirEntry, err error) error {
+			if err != nil || d.IsDir() {
+				return nil
+			}
+			name := d.Name()
+			if !strings.HasPrefix(name, "kobo-") {
+				return nil
+			}
+			info, err := d.Info()
+			if err != nil {
+				return nil
+			}
+			if info.ModTime().Before(cutoff) {
+				_ = os.Remove(p)
+			}
+			return nil
+		})
+	}
 	return nil
 }
+
+// osDirEntry is an alias to keep the import surface minimal.
+type osDirEntry = fs.DirEntry
 
 // OPDSTokenPruner deletes OPDS tokens revoked > 30 days ago.
 func (t *Tasks) OPDSTokenPruner(ctx context.Context) error {
