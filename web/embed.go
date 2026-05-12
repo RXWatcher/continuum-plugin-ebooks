@@ -1,6 +1,5 @@
-// Package web embeds the built SPA. The SPA itself is left as a minimal
-// placeholder in v1 — the Go backend exposes the full REST API but the
-// rich React reader is deferred (see plan Phases 20-24).
+// Package web embeds the built SPA so the Go binary contains a single
+// artifact suitable for upload via continuum's plugin uploader.
 package web
 
 import (
