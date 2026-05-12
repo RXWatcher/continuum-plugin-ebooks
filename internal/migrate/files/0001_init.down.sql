@@ -1,0 +1,4 @@
+DROP TABLE IF EXISTS request;
+DROP TABLE IF EXISTS annotation;
+DROP TABLE IF EXISTS user_data;
+DROP TABLE IF EXISTS backend_config;
