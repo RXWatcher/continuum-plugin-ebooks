@@ -1,0 +1,523 @@
+package server
+
+import (
+	cryptoRand "crypto/rand"
+	"crypto/sha1"
+	"encoding/base64"
+	"encoding/hex"
+	"encoding/json"
+	"encoding/xml"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"strings"
+	"time"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/oklog/ulid/v2"
+	"golang.org/x/crypto/bcrypt"
+
+	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/auth"
+	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/backend"
+	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/store"
+)
+
+// -- OPDS feeds (public route; basic-auth handled here) ------------------
+
+func (s *Server) mountOPDS(r chi.Router) {
+	r.Get("/", s.handleOPDSRoot)
+	r.Get("/catalog", s.handleOPDSCatalog)
+	r.Get("/search", s.handleOPDSSearch)
+	r.Get("/book/{id}", s.handleOPDSBookEntry)
+	r.Get("/book/{id}/download/{format}", s.handleOPDSDownload)
+}
+
+type opdsFeed struct {
+	XMLName  xml.Name    `xml:"feed"`
+	XMLNS    string      `xml:"xmlns,attr"`
+	XMLNSOPDS string     `xml:"xmlns:opds,attr,omitempty"`
+	ID       string      `xml:"id"`
+	Title    string      `xml:"title"`
+	Updated  string      `xml:"updated"`
+	Links    []opdsLink  `xml:"link"`
+	Entries  []opdsEntry `xml:"entry"`
+}
+
+type opdsEntry struct {
+	ID      string     `xml:"id"`
+	Title   string     `xml:"title"`
+	Updated string     `xml:"updated"`
+	Authors []opdsAuth `xml:"author"`
+	Summary string     `xml:"summary,omitempty"`
+	Links   []opdsLink `xml:"link"`
+}
+
+type opdsAuth struct {
+	Name string `xml:"name"`
+}
+
+type opdsLink struct {
+	Rel  string `xml:"rel,attr,omitempty"`
+	Type string `xml:"type,attr,omitempty"`
+	Href string `xml:"href,attr"`
+}
+
+func (s *Server) handleOPDSRoot(w http.ResponseWriter, r *http.Request) {
+	feed := opdsFeed{
+		XMLNS:   "http://www.w3.org/2005/Atom",
+		ID:      "tag:continuum:ebooks:opds",
+		Title:   "Continuum Library",
+		Updated: time.Now().UTC().Format(time.RFC3339),
+		Links: []opdsLink{
+			{Rel: "self", Type: "application/atom+xml;profile=opds-catalog", Href: "/opds/"},
+			{Rel: "start", Type: "application/atom+xml;profile=opds-catalog", Href: "/opds/"},
+			{Rel: "http://opds-spec.org/sort/new", Type: "application/atom+xml;profile=opds-catalog;kind=acquisition", Href: "/opds/catalog"},
+			{Rel: "search", Type: "application/opensearchdescription+xml", Href: "/opds/search"},
+		},
+	}
+	writeOPDS(w, feed)
+}
+
+func (s *Server) handleOPDSCatalog(w http.ResponseWriter, r *http.Request) {
+	if !s.opdsAuth(r) {
+		s.opdsChallenge(w, r)
+		return
+	}
+	cfg, _ := s.deps.Store.GetConfig(r.Context())
+	if cfg.TargetBackendPluginID == "" {
+		writeErr(w, 412, "no backend")
+		return
+	}
+	bk := backend.NewEbookBackend(s.deps.Host, cfg.TargetBackendPluginID)
+	env, err := bk.ListCatalog(r.Context(), "", "added", "desc", 50)
+	if err != nil {
+		writeErr(w, 502, err.Error())
+		return
+	}
+	feed := opdsFeed{
+		XMLNS:   "http://www.w3.org/2005/Atom",
+		ID:      "tag:continuum:ebooks:opds:catalog",
+		Title:   cfg.OpdsRealm + " — Catalog",
+		Updated: time.Now().UTC().Format(time.RFC3339),
+		Links: []opdsLink{
+			{Rel: "self", Type: "application/atom+xml;profile=opds-catalog;kind=acquisition", Href: "/opds/catalog"},
+		},
+	}
+	for _, b := range env.Items {
+		entry := opdsEntry{
+			ID: "tag:continuum:ebooks:book:" + b.ID, Title: b.Title,
+			Updated: time.Now().UTC().Format(time.RFC3339),
+		}
+		for _, a := range b.Authors {
+			entry.Authors = append(entry.Authors, opdsAuth{Name: a})
+		}
+		for _, f := range b.Formats {
+			entry.Links = append(entry.Links, opdsLink{
+				Rel: "http://opds-spec.org/acquisition", Type: formatMime(f),
+				Href: fmt.Sprintf("/opds/book/%s/download/%s", b.ID, f),
+			})
+		}
+		feed.Entries = append(feed.Entries, entry)
+	}
+	writeOPDS(w, feed)
+}
+
+func (s *Server) handleOPDSSearch(w http.ResponseWriter, r *http.Request) {
+	if !s.opdsAuth(r) {
+		s.opdsChallenge(w, r)
+		return
+	}
+	q := r.URL.Query().Get("q")
+	if q == "" {
+		// Return OpenSearch description.
+		w.Header().Set("Content-Type", "application/opensearchdescription+xml")
+		_, _ = w.Write([]byte(`<?xml version="1.0"?>
+<OpenSearchDescription xmlns="http://a9.com/-/spec/opensearch/1.1/">
+  <ShortName>Continuum Library</ShortName>
+  <Description>Search Continuum's ebook library</Description>
+  <Url template="/opds/search?q={searchTerms}" type="application/atom+xml"/>
+</OpenSearchDescription>`))
+		return
+	}
+	cfg, _ := s.deps.Store.GetConfig(r.Context())
+	if cfg.TargetBackendPluginID == "" {
+		writeErr(w, 412, "no backend")
+		return
+	}
+	bk := backend.NewEbookBackend(s.deps.Host, cfg.TargetBackendPluginID)
+	env, err := bk.Search(r.Context(), q)
+	if err != nil {
+		writeErr(w, 502, err.Error())
+		return
+	}
+	feed := opdsFeed{
+		XMLNS:   "http://www.w3.org/2005/Atom",
+		ID:      "tag:continuum:ebooks:opds:search",
+		Title:   "Search: " + q,
+		Updated: time.Now().UTC().Format(time.RFC3339),
+	}
+	for _, b := range env.Items {
+		entry := opdsEntry{
+			ID: "tag:continuum:ebooks:book:" + b.ID, Title: b.Title,
+			Updated: time.Now().UTC().Format(time.RFC3339),
+		}
+		for _, a := range b.Authors {
+			entry.Authors = append(entry.Authors, opdsAuth{Name: a})
+		}
+		for _, f := range b.Formats {
+			entry.Links = append(entry.Links, opdsLink{
+				Rel: "http://opds-spec.org/acquisition", Type: formatMime(f),
+				Href: fmt.Sprintf("/opds/book/%s/download/%s", b.ID, f),
+			})
+		}
+		feed.Entries = append(feed.Entries, entry)
+	}
+	writeOPDS(w, feed)
+}
+
+func (s *Server) handleOPDSBookEntry(w http.ResponseWriter, r *http.Request) {
+	if !s.opdsAuth(r) {
+		s.opdsChallenge(w, r)
+		return
+	}
+	cfg, _ := s.deps.Store.GetConfig(r.Context())
+	if cfg.TargetBackendPluginID == "" {
+		writeErr(w, 412, "no backend")
+		return
+	}
+	bk := backend.NewEbookBackend(s.deps.Host, cfg.TargetBackendPluginID)
+	d, err := bk.GetBook(r.Context(), chi.URLParam(r, "id"))
+	if err != nil {
+		writeErr(w, 502, err.Error())
+		return
+	}
+	entry := opdsEntry{
+		ID: "tag:continuum:ebooks:book:" + d.ID, Title: d.Title, Summary: d.Description,
+		Updated: time.Now().UTC().Format(time.RFC3339),
+	}
+	for _, a := range d.Authors {
+		entry.Authors = append(entry.Authors, opdsAuth{Name: a})
+	}
+	for _, f := range d.Files {
+		entry.Links = append(entry.Links, opdsLink{
+			Rel: "http://opds-spec.org/acquisition", Type: f.MimeType,
+			Href: fmt.Sprintf("/opds/book/%s/download/%s", d.ID, f.Format),
+		})
+	}
+	w.Header().Set("Content-Type", "application/atom+xml;profile=opds-catalog;kind=acquisition")
+	_ = xml.NewEncoder(w).Encode(entry)
+}
+
+func (s *Server) handleOPDSDownload(w http.ResponseWriter, r *http.Request) {
+	if !s.opdsAuth(r) {
+		s.opdsChallenge(w, r)
+		return
+	}
+	cfg, _ := s.deps.Store.GetConfig(r.Context())
+	if cfg.TargetBackendPluginID == "" {
+		writeErr(w, 412, "no backend")
+		return
+	}
+	bk := backend.NewEbookBackend(s.deps.Host, cfg.TargetBackendPluginID)
+	bookID := chi.URLParam(r, "id")
+	format := chi.URLParam(r, "format")
+	resp, err := s.deps.Host.GetStream(r.Context(), cfg.TargetBackendPluginID, bk.FilePath(bookID, format), nil)
+	if err != nil {
+		writeErr(w, 502, err.Error())
+		return
+	}
+	if resp.Body != nil {
+		defer resp.Body.Close()
+	}
+	for _, h := range []string{"Content-Type", "Content-Length"} {
+		if v := resp.Header.Get(h); v != "" {
+			w.Header().Set(h, v)
+		}
+	}
+	w.WriteHeader(resp.StatusCode)
+	_, _ = io.Copy(w, resp.Body)
+}
+
+func writeOPDS(w http.ResponseWriter, f opdsFeed) {
+	w.Header().Set("Content-Type", "application/atom+xml;profile=opds-catalog;kind=acquisition")
+	_, _ = w.Write([]byte(xml.Header))
+	_ = xml.NewEncoder(w).Encode(f)
+}
+
+func formatMime(f string) string {
+	switch strings.ToLower(f) {
+	case "epub":
+		return "application/epub+zip"
+	case "pdf":
+		return "application/pdf"
+	case "mobi":
+		return "application/x-mobipocket-ebook"
+	case "azw", "azw3":
+		return "application/vnd.amazon.ebook"
+	}
+	return "application/octet-stream"
+}
+
+func (s *Server) opdsAuth(r *http.Request) bool {
+	user, pass, ok := r.BasicAuth()
+	if !ok || user == "" || pass == "" {
+		return false
+	}
+	t, err := s.deps.Store.GetOPDSTokenByJTI(r.Context(), pass)
+	if err != nil {
+		return false
+	}
+	if t.UserID != user {
+		return false
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(t.TokenHash), []byte(pass)); err != nil {
+		return false
+	}
+	_ = s.deps.Store.TouchOPDSToken(r.Context(), pass)
+	return true
+}
+
+func (s *Server) opdsChallenge(w http.ResponseWriter, r *http.Request) {
+	cfg, _ := s.deps.Store.GetConfig(r.Context())
+	realm := cfg.OpdsRealm
+	if realm == "" {
+		realm = "Continuum Library"
+	}
+	w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Basic realm=%q`, realm))
+	http.Error(w, "auth required", http.StatusUnauthorized)
+}
+
+// OPDS token user endpoints
+func (s *Server) handleListOPDSTokens(w http.ResponseWriter, r *http.Request) {
+	id, _ := auth.FromContext(r.Context())
+	ts, _ := s.deps.Store.ListOPDSTokensByUser(r.Context(), id.UserID)
+	out := make([]map[string]any, 0, len(ts))
+	for _, t := range ts {
+		out = append(out, map[string]any{
+			"id":           t.ID,
+			"label":        t.Label,
+			"last_used_at": t.LastUsedAt,
+			"created_at":   t.CreatedAt,
+			"revoked":      t.RevokedAt != nil,
+		})
+	}
+	writeJSON(w, 200, map[string]any{"items": out})
+}
+
+func (s *Server) handleCreateOPDSToken(w http.ResponseWriter, r *http.Request) {
+	id, _ := auth.FromContext(r.Context())
+	var body struct {
+		Label string `json:"label"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&body)
+	// Random JTI shown to user once; hash stored.
+	buf := make([]byte, 24)
+	if _, err := io.ReadFull(cryptoRand.Reader, buf); err != nil {
+		writeErr(w, 500, err.Error())
+		return
+	}
+	jti := base64.URLEncoding.WithPadding(base64.NoPadding).EncodeToString(buf)
+	hash, err := bcrypt.GenerateFromPassword([]byte(jti), bcrypt.DefaultCost)
+	if err != nil {
+		writeErr(w, 500, err.Error())
+		return
+	}
+	t := store.OPDSToken{
+		ID: ulid.Make().String(), UserID: id.UserID, JTI: jti, TokenHash: string(hash), Label: body.Label,
+	}
+	if err := s.deps.Store.InsertOPDSToken(r.Context(), t); err != nil {
+		writeErr(w, 500, err.Error())
+		return
+	}
+	writeJSON(w, 201, map[string]any{"id": t.ID, "label": t.Label, "jti_shown_once": jti})
+}
+
+func (s *Server) handleRevokeOPDSToken(w http.ResponseWriter, r *http.Request) {
+	id, _ := auth.FromContext(r.Context())
+	tid := chi.URLParam(r, "id")
+	if err := s.deps.Store.RevokeOPDSToken(r.Context(), tid, id.UserID); err != nil {
+		writeErr(w, 404, err.Error())
+		return
+	}
+	w.WriteHeader(204)
+}
+
+// -- kosync routes --------------------------------------------------------
+
+func (s *Server) mountKosync(r chi.Router) {
+	r.Post("/users/create", s.handleKosyncCreate)
+	r.Post("/users/auth", s.handleKosyncAuth)
+	r.Get("/syncs/progress/{document}", s.handleKosyncGetProgress)
+	r.Put("/syncs/progress", s.handleKosyncPutProgress)
+}
+
+func (s *Server) handleKosyncCreate(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeErr(w, 400, err.Error())
+		return
+	}
+	if body.Username == "" || body.Password == "" {
+		writeErr(w, 400, "username/password required")
+		return
+	}
+	id, _ := auth.FromContext(r.Context())
+	// KOReader hashes password client-side as sha1(password) → we then bcrypt.
+	pwsha1 := sha1.Sum([]byte(body.Password))
+	pwhex := hex.EncodeToString(pwsha1[:])
+	hash, err := bcrypt.GenerateFromPassword([]byte(pwhex), bcrypt.DefaultCost)
+	if err != nil {
+		writeErr(w, 500, err.Error())
+		return
+	}
+	if err := s.deps.Store.UpsertKosyncUser(r.Context(), store.KosyncUser{
+		UserID:             id.UserID,
+		KosyncUsername:     body.Username,
+		KosyncPasswordHash: string(hash),
+	}); err != nil {
+		writeErr(w, 500, err.Error())
+		return
+	}
+	writeJSON(w, 200, map[string]any{"username": body.Username})
+}
+
+func (s *Server) kosyncAuthHeader(r *http.Request) (store.KosyncUser, error) {
+	username := r.Header.Get("x-auth-user")
+	key := r.Header.Get("x-auth-key")
+	if username == "" || key == "" {
+		return store.KosyncUser{}, errors.New("missing auth headers")
+	}
+	u, err := s.deps.Store.GetKosyncUserByUsername(r.Context(), username)
+	if err != nil {
+		return store.KosyncUser{}, err
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(u.KosyncPasswordHash), []byte(key)); err != nil {
+		return store.KosyncUser{}, err
+	}
+	return u, nil
+}
+
+func (s *Server) handleKosyncAuth(w http.ResponseWriter, r *http.Request) {
+	if _, err := s.kosyncAuthHeader(r); err != nil {
+		writeErr(w, 401, "unauthorized")
+		return
+	}
+	writeJSON(w, 200, map[string]any{"authorized": "OK"})
+}
+
+func (s *Server) handleKosyncGetProgress(w http.ResponseWriter, r *http.Request) {
+	u, err := s.kosyncAuthHeader(r)
+	if err != nil {
+		writeErr(w, 401, "unauthorized")
+		return
+	}
+	doc := chi.URLParam(r, "document")
+	p, err := s.deps.Store.GetKosyncProgress(r.Context(), u.UserID, doc)
+	if err != nil {
+		writeJSON(w, 200, nil)
+		return
+	}
+	writeJSON(w, 200, map[string]any{
+		"document": p.Document, "progress": p.Progress,
+		"percentage": p.Percentage, "device": p.Device, "device_id": p.DeviceID,
+		"timestamp": p.Timestamp,
+	})
+}
+
+func (s *Server) handleKosyncPutProgress(w http.ResponseWriter, r *http.Request) {
+	u, err := s.kosyncAuthHeader(r)
+	if err != nil {
+		writeErr(w, 401, "unauthorized")
+		return
+	}
+	var body struct {
+		Document   string  `json:"document"`
+		Progress   string  `json:"progress"`
+		Percentage float64 `json:"percentage"`
+		Device     string  `json:"device"`
+		DeviceID   string  `json:"device_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeErr(w, 400, err.Error())
+		return
+	}
+	if err := s.deps.Store.UpsertKosyncProgress(r.Context(), store.KosyncProgress{
+		UserID: u.UserID, Document: body.Document, Progress: body.Progress,
+		Percentage: body.Percentage, Device: body.Device, DeviceID: body.DeviceID,
+	}); err != nil {
+		writeErr(w, 500, err.Error())
+		return
+	}
+	writeJSON(w, 200, map[string]any{"document": body.Document})
+}
+
+// User-facing kosync management (under /api/v1/me/kosync)
+func (s *Server) handleKosyncStatus(w http.ResponseWriter, r *http.Request) {
+	id, _ := auth.FromContext(r.Context())
+	users, _ := s.deps.Store.ListKosyncUsers(r.Context())
+	for _, u := range users {
+		if u.UserID == id.UserID {
+			writeJSON(w, 200, map[string]any{
+				"registered": true, "kosync_username": u.KosyncUsername,
+			})
+			return
+		}
+	}
+	writeJSON(w, 200, map[string]any{"registered": false})
+}
+
+func (s *Server) handleKosyncRegister(w http.ResponseWriter, r *http.Request) {
+	s.handleKosyncCreate(w, r)
+}
+
+func (s *Server) handleKosyncDelete(w http.ResponseWriter, r *http.Request) {
+	id, _ := auth.FromContext(r.Context())
+	users, _ := s.deps.Store.ListKosyncUsers(r.Context())
+	for _, u := range users {
+		if u.UserID == id.UserID {
+			_ = s.deps.Store.DeleteKosyncUser(r.Context(), u.KosyncUsername)
+			w.WriteHeader(204)
+			return
+		}
+	}
+	w.WriteHeader(404)
+}
+
+// -- Kobo browser-served transfer ----------------------------------------
+
+func (s *Server) mountKobo(r chi.Router) {
+	r.Get("/{code}", s.handleKoboServeFile)
+}
+
+func (s *Server) handleKoboServeFile(w http.ResponseWriter, r *http.Request) {
+	code := chi.URLParam(r, "code")
+	sess, err := s.deps.Store.GetKoboSessionByCode(r.Context(), code)
+	if err != nil {
+		writeErr(w, 404, "not found")
+		return
+	}
+	if sess.Status == "completed" || sess.Status == "expired" || time.Now().After(sess.ExpiresAt) {
+		writeErr(w, 410, "session expired")
+		return
+	}
+	_ = s.deps.Store.MarkKoboActive(r.Context(), code)
+	f, err := os.Open(sess.SourcePath)
+	if err != nil {
+		writeErr(w, 410, "file gone")
+		return
+	}
+	defer f.Close()
+	stat, _ := f.Stat()
+	w.Header().Set("Content-Type", "application/epub+zip")
+	if stat != nil {
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", stat.Size()))
+	}
+	w.Header().Set("Content-Disposition", "attachment; filename=\"book.kepub.epub\"")
+	_, _ = io.Copy(w, f)
+	_ = s.deps.Store.MarkKoboCompleted(r.Context(), code)
+}
