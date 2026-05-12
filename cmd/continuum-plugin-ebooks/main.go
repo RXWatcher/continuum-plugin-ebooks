@@ -140,11 +140,12 @@ func main() {
 
 		consumerDepsP.Store(&consumer.Deps{Store: st})
 		tasksPtr.Store(&scheduler.Tasks{
-			Store:    st,
-			Host:     host,
-			Ev:       ev,
-			Log:      logger.Named("scheduler"),
-			CacheDir: cfg.CacheDir,
+			Store:        st,
+			Host:         host,
+			Ev:           ev,
+			Log:          logger.Named("scheduler"),
+			CacheDir:     cfg.CacheDir,
+			CacheManager: cacheMgr,
 		})
 
 		if old := poolPtr.Swap(p); old != nil {

@@ -2,11 +2,11 @@ package scheduler
 
 import (
 	"context"
-	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/fs"
-	"net/smtp"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,15 +16,18 @@ import (
 
 	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/backend"
 	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/event"
+	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/kindle"
 	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/store"
+	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/streaming"
 )
 
 // Tasks holds the shared dependencies all scheduled tasks need.
 type Tasks struct {
-	Store *store.Store
-	Host  *backend.HostHTTPClient
-	Ev    *event.Publisher
-	Log   hclog.Logger
+	Store        *store.Store
+	Host         *backend.HostHTTPClient
+	Ev           *event.Publisher
+	Log          hclog.Logger
+	CacheManager *streaming.Manager
 	// CacheDir is the on-disk root for cached ebook files.
 	CacheDir string
 }
@@ -152,32 +155,27 @@ func (t *Tasks) OPDSTokenPruner(ctx context.Context) error {
 }
 
 // KindleSendRetrier retries Kindle sends that have been in 'queued' status > 30s.
-// Max 3 attempts per row (tracked by the error_text prefix).
+// Max 3 attempts per row (tracked by the error_text prefix). For each row it
+// fetches the EPUB via the streaming layer (cache hit or single-flight
+// download), then emails it as an attachment using internal/kindle.Sender.
 func (t *Tasks) KindleSendRetrier(ctx context.Context) error {
 	cfg, err := t.Store.GetConfig(ctx)
 	if err != nil {
 		return err
 	}
 	if len(cfg.KindleSMTPConfig) == 0 || string(cfg.KindleSMTPConfig) == "{}" {
-		return nil // no smtp config; nothing to do
+		return nil
 	}
-	var smtpCfg struct {
-		Host     string `json:"host"`
-		Port     int    `json:"port"`
-		Username string `json:"username"`
-		Password string `json:"password"`
-		From     string `json:"from"`
-		TLS      string `json:"tls"`
-	}
+	var smtpCfg kindle.SMTPConfig
 	if err := json.Unmarshal(cfg.KindleSMTPConfig, &smtpCfg); err != nil {
 		return fmt.Errorf("decode smtp config: %w", err)
 	}
+	sender := kindle.New(smtpCfg)
 	queued, err := t.Store.ListQueuedKindleSends(ctx, time.Now().Add(-30*time.Second), 10)
 	if err != nil {
 		return err
 	}
 	for _, k := range queued {
-		// Count previous attempts based on a tag in error_text.
 		attempts := 1 + strings.Count(k.ErrorText, "attempt:")
 		if attempts > 3 {
 			now := time.Now()
@@ -185,72 +183,81 @@ func (t *Tasks) KindleSendRetrier(ctx context.Context) error {
 				k.ErrorText+" | attempt:max", &now)
 			continue
 		}
-		if err := sendKindleMail(smtpCfg, k); err != nil {
+		path, cleanup, err := t.fetchKindleSource(ctx, cfg, k)
+		if err != nil {
 			_ = t.Store.UpdateKindleSendStatus(ctx, k.ID, "queued",
-				k.ErrorText+fmt.Sprintf(" | attempt:%d:%s", attempts, err.Error()), nil)
+				k.ErrorText+fmt.Sprintf(" | attempt:%d:fetch:%s", attempts, err.Error()), nil)
 			continue
 		}
+		subject := "Your Continuum ebook"
+		attachName := fmt.Sprintf("%s.%s", k.BookID, k.Format)
+		if err := sender.Send(ctx, k.ToAddress, subject, path, attachName); err != nil {
+			_ = t.Store.UpdateKindleSendStatus(ctx, k.ID, "queued",
+				k.ErrorText+fmt.Sprintf(" | attempt:%d:send:%s", attempts, err.Error()), nil)
+			cleanup()
+			continue
+		}
+		cleanup()
 		now := time.Now()
 		_ = t.Store.UpdateKindleSendStatus(ctx, k.ID, "sent", "", &now)
 	}
 	return nil
 }
 
-// sendKindleMail sends a Kindle email using plain net/smtp. Attaching the
-// actual file body is intentionally simplified: this retrier is the
-// last-attempt path and assumes the file is reachable on disk via the
-// portal cache. Production implementations should use gomail/v2 and fetch
-// the cached file by cache_key; the simplified version here only verifies
-// SMTP transport works.
-func sendKindleMail(smtpCfg struct {
-	Host     string `json:"host"`
-	Port     int    `json:"port"`
-	Username string `json:"username"`
-	Password string `json:"password"`
-	From     string `json:"from"`
-	TLS      string `json:"tls"`
-}, k store.KindleSend) error {
-	if smtpCfg.Host == "" || smtpCfg.Port == 0 {
-		return fmt.Errorf("smtp host/port missing")
+// fetchKindleSource returns a local on-disk path to the ebook bytes for one
+// kindle_send_log row. Preference order:
+//  1. cache hit via streaming.Manager (no extra IO; returns cached file path)
+//  2. cache fill via single-flight (one network round-trip)
+//  3. transient temp file as a last resort if no manager is wired
+//
+// The returned cleanup func MUST be called on completion. It is a no-op for
+// (1)/(2) but removes the temp file in case (3).
+func (t *Tasks) fetchKindleSource(ctx context.Context, cfg store.Config, k store.KindleSend) (string, func(), error) {
+	noop := func() {}
+	if cfg.TargetBackendPluginID == "" {
+		return "", noop, fmt.Errorf("no backend configured")
 	}
-	addr := fmt.Sprintf("%s:%d", smtpCfg.Host, smtpCfg.Port)
-	auth := smtp.PlainAuth("", smtpCfg.Username, smtpCfg.Password, smtpCfg.Host)
-	from := smtpCfg.From
-	if from == "" {
-		from = smtpCfg.Username
-	}
-	msg := []byte(fmt.Sprintf(
-		"From: %s\r\nTo: %s\r\nSubject: Your Continuum ebook (book_id=%s)\r\n\r\nThis is a placeholder Kindle send; the file should be attached here.",
-		from, k.ToAddress, k.BookID,
-	))
-	switch smtpCfg.TLS {
-	case "tls":
-		c, err := smtp.Dial(addr)
+	bk := backend.NewEbookBackend(t.Host, cfg.TargetBackendPluginID)
+	if t.CacheManager != nil {
+		key := streaming.ComputeCacheKey(k.BookID, k.Format, cfg.TargetBackendPluginID)
+		if e, ok := t.CacheManager.Lookup(ctx, key); ok {
+			return t.CacheManager.PathFor(e), noop, nil
+		}
+		fetch := func(ctx context.Context) (io.ReadCloser, http.Header, int64, string, error) {
+			resp, err := t.Host.GetStream(ctx, cfg.TargetBackendPluginID, bk.FilePath(k.BookID, k.Format), nil)
+			if err != nil {
+				return nil, nil, 0, "", err
+			}
+			return resp.Body, resp.Header, resp.ContentLength, resp.Header.Get("Content-Type"), nil
+		}
+		entry, err := t.CacheManager.StartOrJoin(ctx, key, k.BookID, k.Format, fetch)
 		if err != nil {
-			return err
+			return "", noop, err
 		}
-		defer c.Close()
-		if err := c.StartTLS(&tls.Config{ServerName: smtpCfg.Host}); err != nil {
-			return err
-		}
-		if err := c.Auth(auth); err != nil {
-			return err
-		}
-		if err := c.Mail(from); err != nil {
-			return err
-		}
-		if err := c.Rcpt(k.ToAddress); err != nil {
-			return err
-		}
-		wc, err := c.Data()
-		if err != nil {
-			return err
-		}
-		if _, err := wc.Write(msg); err != nil {
-			return err
-		}
-		return wc.Close()
-	default:
-		return smtp.SendMail(addr, auth, from, []string{k.ToAddress}, msg)
+		return t.CacheManager.PathFor(entry), noop, nil
 	}
+	// Fallback: stream to a temp file.
+	resp, err := t.Host.GetStream(ctx, cfg.TargetBackendPluginID, bk.FilePath(k.BookID, k.Format), nil)
+	if err != nil {
+		return "", noop, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		return "", noop, fmt.Errorf("upstream %d", resp.StatusCode)
+	}
+	dir := t.CacheDir
+	if dir == "" {
+		dir = os.TempDir()
+	}
+	tmp, err := os.CreateTemp(dir, "kindle-*.epub")
+	if err != nil {
+		return "", noop, err
+	}
+	if _, err := io.Copy(tmp, resp.Body); err != nil {
+		_ = tmp.Close()
+		_ = os.Remove(tmp.Name())
+		return "", noop, err
+	}
+	_ = tmp.Close()
+	return tmp.Name(), func() { _ = os.Remove(tmp.Name()) }, nil
 }
