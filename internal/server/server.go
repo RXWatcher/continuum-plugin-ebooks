@@ -13,14 +13,16 @@ import (
 	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/backend"
 	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/event"
 	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/store"
+	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/streaming"
 )
 
 type Deps struct {
-	Store    *store.Store
-	Host     *backend.HostHTTPClient
-	Ev       *event.Publisher
-	CacheDir string
-	WebFS    http.FileSystem
+	Store        *store.Store
+	Host         *backend.HostHTTPClient
+	Ev           *event.Publisher
+	CacheDir     string
+	CacheManager *streaming.Manager
+	WebFS        http.FileSystem
 }
 
 type Server struct {

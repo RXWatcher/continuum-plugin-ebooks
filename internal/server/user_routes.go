@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -14,6 +15,7 @@ import (
 	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/auth"
 	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/backend"
 	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/store"
+	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/streaming"
 )
 
 func (s *Server) mountUserRoutes(r chi.Router) {
@@ -154,6 +156,9 @@ func (s *Server) handleUpdateBookMeta(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]any{"ok": true})
 }
 
+// handleStreamFile dispatches to the configured streaming mode. "proxy"
+// pipes bytes live; "cache" looks up (and on miss, single-flight downloads)
+// the file into the LRU-managed cache.
 func (s *Server) handleStreamFile(w http.ResponseWriter, r *http.Request) {
 	bookID := chi.URLParam(r, "id")
 	format := r.URL.Query().Get("format")
@@ -165,26 +170,46 @@ func (s *Server) handleStreamFile(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 412, "no backend configured")
 		return
 	}
-	bk := backend.NewEbookBackend(s.deps.Host, cfg.TargetBackendPluginID)
-	headers := map[string]string{}
-	if rng := r.Header.Get("Range"); rng != "" {
-		headers["Range"] = rng
+	mode := streaming.ResolveMode(cfg)
+	if mode == "cache" && s.deps.CacheManager != nil {
+		s.cacheStream(w, r, cfg.TargetBackendPluginID, bookID, format)
+		return
 	}
-	resp, err := s.deps.Host.GetStream(r.Context(), cfg.TargetBackendPluginID, bk.FilePath(bookID, format), headers)
+	streaming.ProxyStream(w, r, s.deps.Host, cfg.TargetBackendPluginID, bookID, format)
+}
+
+// cacheStream implements the cache-mode handler. Cache hit → http.ServeFile;
+// miss → single-flight download via streaming.Manager, then serve.
+func (s *Server) cacheStream(w http.ResponseWriter, r *http.Request, installID, bookID, format string) {
+	key := streaming.ComputeCacheKey(bookID, format, installID)
+	m := s.deps.CacheManager
+	if e, ok := m.Lookup(r.Context(), key); ok {
+		_ = m.Touch(r.Context(), e.ID)
+		serveCacheFile(w, r, m.PathFor(e), e.MimeType)
+		return
+	}
+	bk := backend.NewEbookBackend(s.deps.Host, installID)
+	fetch := func(ctx context.Context) (io.ReadCloser, http.Header, int64, string, error) {
+		upstream, err := s.deps.Host.GetStream(ctx, installID, bk.FilePath(bookID, format), nil)
+		if err != nil {
+			return nil, nil, 0, "", err
+		}
+		return upstream.Body, upstream.Header, upstream.ContentLength, upstream.Header.Get("Content-Type"), nil
+	}
+	entry, err := m.StartOrJoin(r.Context(), key, bookID, format, fetch)
 	if err != nil {
 		writeErr(w, 502, err.Error())
 		return
 	}
-	if resp.Body != nil {
-		defer resp.Body.Close()
+	_ = m.Touch(r.Context(), entry.ID)
+	serveCacheFile(w, r, m.PathFor(entry), entry.MimeType)
+}
+
+func serveCacheFile(w http.ResponseWriter, r *http.Request, path, mime string) {
+	if mime != "" {
+		w.Header().Set("Content-Type", mime)
 	}
-	for _, h := range []string{"Content-Type", "Content-Length", "Content-Range", "Accept-Ranges"} {
-		if v := resp.Header.Get(h); v != "" {
-			w.Header().Set(h, v)
-		}
-	}
-	w.WriteHeader(resp.StatusCode)
-	_, _ = io.Copy(w, resp.Body)
+	http.ServeFile(w, r, path)
 }
 
 func (s *Server) handleListAnnotations(w http.ResponseWriter, r *http.Request) {

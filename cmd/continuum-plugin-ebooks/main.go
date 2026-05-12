@@ -26,6 +26,7 @@ import (
 	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/scheduler"
 	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/server"
 	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/store"
+	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/streaming"
 	"github.com/ContinuumApp/continuum-plugin-ebooks/web"
 )
 
@@ -121,12 +122,19 @@ func main() {
 
 		ev := event.New(sdkruntime.Host(), logger.Named("event"))
 
+		var cacheMgr *streaming.Manager
+		if cfg.CacheDir != "" {
+			maxBytes := int64(cfg.CacheMaxSizeGB) * 1024 * 1024 * 1024
+			cacheMgr = streaming.NewManager(cfg.CacheDir, maxBytes, st)
+		}
+
 		srv := server.New(server.Deps{
-			Store:    st,
-			Host:     host,
-			Ev:       ev,
-			CacheDir: cfg.CacheDir,
-			WebFS:    web.FS(),
+			Store:        st,
+			Host:         host,
+			Ev:           ev,
+			CacheDir:     cfg.CacheDir,
+			CacheManager: cacheMgr,
+			WebFS:        web.FS(),
 		})
 		httpSrv.SetHandler(srv.Handler())
 
