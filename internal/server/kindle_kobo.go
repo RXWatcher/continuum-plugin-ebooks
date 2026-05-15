@@ -14,6 +14,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/oklog/ulid/v2"
+	"golang.org/x/crypto/bcrypt"
 
 	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/auth"
 	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/backend"
@@ -24,7 +25,7 @@ import (
 // task picks it up. We accept the request synchronously and return 202.
 func (s *Server) handleSendToKindle(w http.ResponseWriter, r *http.Request) {
 	id, _ := auth.FromContext(r.Context())
-	bookID := chi.URLParam(r, "id")
+	bookRef := chi.URLParam(r, "id")
 	var body struct {
 		Format    string `json:"format"`
 		ToAddress string `json:"to_address"`
@@ -41,7 +42,7 @@ func (s *Server) handleSendToKindle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	entry := store.KindleSend{
-		ID: ulid.Make().String(), UserID: id.UserID, BookID: bookID,
+		ID: ulid.Make().String(), UserID: id.UserID, BookID: bookRef,
 		Format: body.Format, ToAddress: body.ToAddress, Status: "queued",
 	}
 	if err := s.deps.Store.InsertKindleSend(r.Context(), entry); err != nil {
@@ -55,14 +56,20 @@ func (s *Server) handleSendToKindle(w http.ResponseWriter, r *http.Request) {
 // short-lived transfer session, and returns the transfer URL + 4-char code.
 func (s *Server) handleSendToKobo(w http.ResponseWriter, r *http.Request) {
 	id, _ := auth.FromContext(r.Context())
-	bookID := chi.URLParam(r, "id")
+	bookRef := chi.URLParam(r, "id")
+	libraryID, bookID, _ := decodeBookRef(bookRef)
+	lib, err := s.targetLibrary(r, libraryID)
+	if err != nil {
+		writeErr(w, 412, err.Error())
+		return
+	}
 	cfg, err := s.deps.Store.GetConfig(r.Context())
-	if err != nil || cfg.TargetBackendPluginID == "" {
+	if err != nil {
 		writeErr(w, 412, "no backend configured")
 		return
 	}
-	bk := backend.NewEbookBackend(s.deps.Host, cfg.TargetBackendPluginID)
-	resp, err := s.deps.Host.GetStream(r.Context(), cfg.TargetBackendPluginID, bk.FilePath(bookID, "epub"), nil)
+	bk := backend.NewEbookBackend(s.deps.Host, lib.BackendPluginID)
+	resp, err := s.deps.Host.GetStream(r.Context(), lib.BackendPluginID, bk.FilePath(bookID, "epub"), nil)
 	if err != nil {
 		writeErr(w, 502, err.Error())
 		return
@@ -107,15 +114,26 @@ func (s *Server) handleSendToKobo(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 500, err.Error())
 		return
 	}
+	// Bcrypt-hash the URL-supplied code. The plaintext code is shown to the
+	// user once (returned in this response) and never persisted; the DB only
+	// stores the hash. Cost is the bcrypt default — at serve-file time the
+	// reaper-bounded active-session set is small, so the linear scan of
+	// CompareHashAndPassword across pending rows is cheap.
+	codeHash, err := bcrypt.GenerateFromPassword([]byte(code), bcrypt.DefaultCost)
+	if err != nil {
+		_ = os.Remove(kepubPath)
+		writeErr(w, 500, err.Error())
+		return
+	}
 	session := store.KoboSession{
-		ID:           ulid.Make().String(),
-		UserID:       id.UserID,
-		BookID:       bookID,
-		Format:       "kepub",
-		TransferCode: code,
-		SourcePath:   kepubPath,
-		Status:       "pending",
-		ExpiresAt:    time.Now().Add(30 * time.Minute),
+		ID:         ulid.Make().String(),
+		UserID:     id.UserID,
+		BookID:     bookRef,
+		Format:     "kepub",
+		CodeHash:   string(codeHash),
+		SourcePath: kepubPath,
+		Status:     "pending",
+		ExpiresAt:  time.Now().Add(30 * time.Minute),
 	}
 	if err := s.deps.Store.InsertKoboSession(r.Context(), session); err != nil {
 		_ = os.Remove(kepubPath)

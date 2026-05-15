@@ -1,0 +1,1 @@
+-- Compatibility placeholder for databases migrated by earlier development builds.

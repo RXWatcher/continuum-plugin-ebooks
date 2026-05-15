@@ -25,6 +25,7 @@ type Config struct {
 	PathRemappings           json.RawMessage
 	AutoApproveRequests      bool
 	TargetBackendPluginID    string
+	StandaloneHTTPListen     string
 }
 
 func (c Config) Configured() bool { return c.DatabaseURL != "" }
@@ -100,6 +101,8 @@ func (s *Server) Configure(_ context.Context, req *pluginv1.ConfigureRequest) (*
 			}
 		case "target_backend_plugin_id":
 			cfg.TargetBackendPluginID = stringFrom(val)
+		case "standalone_http_listen":
+			cfg.StandaloneHTTPListen = stringFrom(val)
 		}
 	}
 	if cfg.DatabaseURL == "" {

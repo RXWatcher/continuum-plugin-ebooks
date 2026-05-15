@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -9,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -17,9 +19,26 @@ import (
 	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/backend"
 	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/event"
 	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/kindle"
+	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/koboref"
 	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/store"
 	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/streaming"
 )
+
+func decodeBookRef(ref string) (int64, string, bool) {
+	left, right, ok := strings.Cut(ref, ":")
+	if !ok {
+		return 0, ref, false
+	}
+	id, err := strconv.ParseInt(left, 10, 64)
+	if err != nil || id <= 0 {
+		return 0, ref, false
+	}
+	raw, err := base64.RawURLEncoding.DecodeString(right)
+	if err != nil {
+		return 0, ref, false
+	}
+	return id, string(raw), true
+}
 
 // Tasks holds the shared dependencies all scheduled tasks need.
 type Tasks struct {
@@ -30,6 +49,10 @@ type Tasks struct {
 	CacheManager *streaming.Manager
 	// CacheDir is the on-disk root for cached ebook files.
 	CacheDir string
+	// KoboRefs is the in-process registry of active Kobo session readers.
+	// KoboSessionReaper consults it before unlinking a session source file.
+	// If nil, the reaper falls back to the legacy unconditional unlink.
+	KoboRefs *koboref.Registry
 }
 
 // RequestReconciler polls the active backend for non-terminal request status.
@@ -48,7 +71,6 @@ func (t *Tasks) RequestReconciler(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("list non-terminal: %w", err)
 	}
-	bk := backend.NewEbookBackend(t.Host, cfg.TargetBackendPluginID)
 	for _, r := range rows {
 		if r.ExternalID == "" {
 			continue
@@ -57,6 +79,11 @@ func (t *Tasks) RequestReconciler(ctx context.Context) error {
 		if time.Since(r.UpdatedAt) < 30*time.Second {
 			continue
 		}
+		targetPluginID := r.TargetPluginID
+		if targetPluginID == "" {
+			targetPluginID = cfg.TargetBackendPluginID
+		}
+		bk := backend.NewEbookBackend(t.Host, targetPluginID)
 		snap, err := bk.GetRequestSnapshot(ctx, r.ExternalID)
 		if err != nil {
 			t.Log.Debug("reconciler: snapshot error", "request_id", r.ID, "err", err)
@@ -71,7 +98,11 @@ func (t *Tasks) RequestReconciler(ctx context.Context) error {
 }
 
 // CacheEvictor LRU-evicts ebook_file_cache rows down to 95% of the configured
-// max size. Removes the on-disk file referenced by relative_path.
+// max size. Removes the on-disk file referenced by relative_path. Delegates
+// to streaming.Manager.EvictTo when available so the refcount-aware skip of
+// in-flight serves is honored (preventing the read/delete race that produced
+// mid-transfer 410/EOF errors). The legacy inline loop is retained only for
+// the unusual case where no manager is wired.
 func (t *Tasks) CacheEvictor(ctx context.Context) error {
 	cfg, err := t.Store.GetConfig(ctx)
 	if err != nil {
@@ -79,6 +110,10 @@ func (t *Tasks) CacheEvictor(ctx context.Context) error {
 	}
 	maxBytes := int64(cfg.CacheMaxSizeGB) * 1024 * 1024 * 1024
 	target := int64(float64(maxBytes) * 0.95)
+	if t.CacheManager != nil {
+		_, err := t.CacheManager.EvictTo(ctx, target)
+		return err
+	}
 	total, err := t.Store.TotalCacheBytes(ctx)
 	if err != nil {
 		return err
@@ -108,21 +143,50 @@ func (t *Tasks) CacheEvictor(ctx context.Context) error {
 }
 
 // KoboSessionReaper marks expired kobo sessions and removes their disk
-// files. Also sweeps stray kepub temp files left in the cache dir from
-// failed/interrupted previous runs (older than 1h).
+// files. Sessions with an active in-process reader (per t.KoboRefs) are
+// skipped — both the status update and the unlink are deferred to the next
+// tick. This prevents the read/delete race where handleKoboServeFile is
+// mid-io.Copy when the reaper runs.
+//
+// Also sweeps stray kepub temp files left in the cache dir from
+// failed/interrupted previous runs (older than 6h). The threshold is
+// deliberately wide: an in-progress kepubify conversion may have a file on
+// disk with no DB row yet (so the refcount registry can't see it), and a
+// 6h sweep window makes that race statistically impossible while still
+// cleaning up after genuinely-abandoned conversions.
 func (t *Tasks) KoboSessionReaper(ctx context.Context) error {
-	expired, err := t.Store.ExpireStaleKoboSessions(ctx, time.Now())
-	if err != nil {
-		return err
-	}
-	for _, k := range expired {
-		if k.SourcePath != "" {
-			_ = os.Remove(k.SourcePath)
+	now := time.Now()
+	if t.KoboRefs != nil {
+		candidates, err := t.Store.ListStaleKoboSessions(ctx, now)
+		if err != nil {
+			return err
+		}
+		for _, k := range candidates {
+			if t.KoboRefs.InUse(k.ID) {
+				continue
+			}
+			ok, err := t.Store.ExpireKoboSessionByID(ctx, k.ID)
+			if err != nil || !ok {
+				continue
+			}
+			if k.SourcePath != "" {
+				_ = os.Remove(k.SourcePath)
+			}
+		}
+	} else {
+		expired, err := t.Store.ExpireStaleKoboSessions(ctx, now)
+		if err != nil {
+			return err
+		}
+		for _, k := range expired {
+			if k.SourcePath != "" {
+				_ = os.Remove(k.SourcePath)
+			}
 		}
 	}
-	// Sweep stray .kepub.epub files older than 1h from the cache dir.
+	// Sweep stray kepub temp files older than 6h from the cache dir.
 	if t.CacheDir != "" {
-		cutoff := time.Now().Add(-1 * time.Hour)
+		cutoff := now.Add(-6 * time.Hour)
 		_ = filepath.WalkDir(t.CacheDir, func(p string, d osDirEntry, err error) error {
 			if err != nil || d.IsDir() {
 				return nil
@@ -210,34 +274,48 @@ func (t *Tasks) KindleSendRetrier(ctx context.Context) error {
 //  2. cache fill via single-flight (one network round-trip)
 //  3. transient temp file as a last resort if no manager is wired
 //
-// The returned cleanup func MUST be called on completion. It is a no-op for
-// (1)/(2) but removes the temp file in case (3).
+// The returned cleanup func MUST be called on completion. For (1)/(2) it
+// releases the in-process refcount that prevents EvictTo from unlinking the
+// file while the SMTP attach is still reading it. For (3) it removes the
+// temp file.
 func (t *Tasks) fetchKindleSource(ctx context.Context, cfg store.Config, k store.KindleSend) (string, func(), error) {
 	noop := func() {}
-	if cfg.TargetBackendPluginID == "" {
+	backendID := cfg.TargetBackendPluginID
+	_, backendBookID, scoped := decodeBookRef(k.BookID)
+	if scoped {
+		libraryID, _, _ := decodeBookRef(k.BookID)
+		lib, err := t.Store.GetPortalLibrary(ctx, libraryID)
+		if err != nil {
+			return "", noop, fmt.Errorf("library not configured")
+		}
+		backendID = lib.BackendPluginID
+	}
+	if backendID == "" {
 		return "", noop, fmt.Errorf("no backend configured")
 	}
-	bk := backend.NewEbookBackend(t.Host, cfg.TargetBackendPluginID)
+	bk := backend.NewEbookBackend(t.Host, backendID)
 	if t.CacheManager != nil {
-		key := streaming.ComputeCacheKey(k.BookID, k.Format, cfg.TargetBackendPluginID)
+		key := streaming.ComputeCacheKey(backendBookID, k.Format, backendID)
 		if e, ok := t.CacheManager.Lookup(ctx, key); ok {
-			return t.CacheManager.PathFor(e), noop, nil
+			release := t.CacheManager.Acquire(e.ID)
+			return t.CacheManager.PathFor(e), release, nil
 		}
 		fetch := func(ctx context.Context) (io.ReadCloser, http.Header, int64, string, error) {
-			resp, err := t.Host.GetStream(ctx, cfg.TargetBackendPluginID, bk.FilePath(k.BookID, k.Format), nil)
+			resp, err := t.Host.GetStream(ctx, backendID, bk.FilePath(backendBookID, k.Format), nil)
 			if err != nil {
 				return nil, nil, 0, "", err
 			}
 			return resp.Body, resp.Header, resp.ContentLength, resp.Header.Get("Content-Type"), nil
 		}
-		entry, err := t.CacheManager.StartOrJoin(ctx, key, k.BookID, k.Format, fetch)
+		entry, err := t.CacheManager.StartOrJoin(ctx, key, backendBookID, k.Format, fetch)
 		if err != nil {
 			return "", noop, err
 		}
-		return t.CacheManager.PathFor(entry), noop, nil
+		release := t.CacheManager.Acquire(entry.ID)
+		return t.CacheManager.PathFor(entry), release, nil
 	}
 	// Fallback: stream to a temp file.
-	resp, err := t.Host.GetStream(ctx, cfg.TargetBackendPluginID, bk.FilePath(k.BookID, k.Format), nil)
+	resp, err := t.Host.GetStream(ctx, backendID, bk.FilePath(backendBookID, k.Format), nil)
 	if err != nil {
 		return "", noop, err
 	}

@@ -1,31 +1,31 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Link } from 'react-router';
-import { toast } from 'sonner';
-import { Trash2 } from 'lucide-react';
-import { cancelRequest, listMyRequests } from '@/lib/api';
-import { Button } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Link } from "react-router";
+import { toast } from "sonner";
+import { Trash2 } from "lucide-react";
+import { cancelRequest, listMyRequests } from "@/lib/api";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const STATUS_LABELS: Record<string, string> = {
-  pending: 'Pending approval',
-  submitted: 'Submitted',
-  acknowledged: 'Acknowledged',
-  searching: 'Searching',
-  found: 'Found',
-  downloading: 'Downloading',
-  fulfilled: 'Fulfilled',
-  failed: 'Failed',
-  denied: 'Denied',
+  pending: "Pending approval",
+  submitted: "Submitted",
+  acknowledged: "Acknowledged",
+  searching: "Searching",
+  found: "Found",
+  downloading: "Downloading",
+  fulfilled: "Fulfilled",
+  failed: "Failed",
+  denied: "Denied",
 };
 
 export default function MyRequests() {
   const qc = useQueryClient();
-  const q = useQuery({ queryKey: ['my-requests'], queryFn: listMyRequests });
+  const q = useQuery({ queryKey: ["my-requests"], queryFn: listMyRequests });
   const cancel = useMutation({
     mutationFn: (id: string) => cancelRequest(id),
     onSuccess: () => {
-      toast.success('Request cancelled');
-      qc.invalidateQueries({ queryKey: ['my-requests'] });
+      toast.success("Request cancelled");
+      qc.invalidateQueries({ queryKey: ["my-requests"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -53,18 +53,25 @@ export default function MyRequests() {
               key={r.id}
               className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card p-3"
             >
-              <div className="flex-1 min-w-0">
-                <p className="truncate text-sm font-medium">{r.title}</p>
+              <Link
+                to={`/me/requests/${encodeURIComponent(r.id)}`}
+                className="min-w-0 flex-1"
+              >
+                <p className="truncate text-sm font-medium hover:text-primary">
+                  {r.title}
+                </p>
                 {r.authors && r.authors.length > 0 && (
-                  <p className="truncate text-xs text-muted-foreground">{r.authors.join(', ')}</p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {r.authors.join(", ")}
+                  </p>
                 )}
                 <p className="mt-1 text-xs text-muted-foreground">
                   {STATUS_LABELS[r.status] ?? r.status}
-                  {r.denied_reason ? ` — ${r.denied_reason}` : ''}
-                  {r.failure_reason ? ` — ${r.failure_reason}` : ''}
+                  {r.denied_reason ? ` — ${r.denied_reason}` : ""}
+                  {r.failure_reason ? ` — ${r.failure_reason}` : ""}
                 </p>
-              </div>
-              {['pending', 'submitted'].includes(r.status) && (
+              </Link>
+              {["pending", "submitted"].includes(r.status) && (
                 <Button
                   size="icon"
                   variant="ghost"

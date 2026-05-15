@@ -108,7 +108,7 @@ func TestStore_Smoke(t *testing.T) {
 	if len(cfg.KosyncSecret) == 0 {
 		t.Errorf("kosync_secret should be auto-populated")
 	}
-	cfg.TargetBackendPluginID = "continuum.bookwarehouse-ebook"
+	cfg.TargetBackendPluginID = "continuum.ebook-library-source"
 	if err := s.UpsertConfig(ctx, cfg); err != nil {
 		t.Fatalf("UpsertConfig: %v", err)
 	}
@@ -142,7 +142,7 @@ func TestStore_Smoke(t *testing.T) {
 	// request
 	if err := s.InsertRequest(ctx, store.Request{
 		ID: "r1", UserID: "u1", Title: "X", Authors: []string{"A"},
-		Status: "pending", TargetPluginID: "continuum.bookwarehouse-ebook",
+		Status: "pending", TargetPluginID: "continuum.ebook-library-source",
 	}); err != nil {
 		t.Fatalf("InsertRequest: %v", err)
 	}
@@ -166,10 +166,12 @@ func TestStore_Smoke(t *testing.T) {
 		t.Errorf("items = %v", items)
 	}
 
-	// kobo_transfer_session
+	// kobo_transfer_session — CodeHash stores the bcrypt hash of the URL code;
+	// this fixture uses a dummy hash since the smoke path doesn't exercise
+	// CompareHashAndPassword (covered in TestKoboSession_BcryptMatch).
 	if err := s.InsertKoboSession(ctx, store.KoboSession{
 		ID: "k1", UserID: "u1", BookID: "b1", Format: "kepub",
-		TransferCode: "ABCD", SourcePath: "/tmp/x.kepub", Status: "pending",
+		CodeHash: "$2a$10$abcdefghijklmnopqrstuv", SourcePath: "/tmp/x.kepub", Status: "pending",
 		ExpiresAt: time.Now().Add(time.Hour),
 	}); err != nil {
 		t.Fatalf("InsertKoboSession: %v", err)
@@ -217,5 +219,68 @@ func TestStore_Smoke(t *testing.T) {
 		ToAddress: "alice@kindle.com", Status: "queued",
 	}); err != nil {
 		t.Fatalf("InsertKindleSend: %v", err)
+	}
+}
+
+// TestE3_KosyncProgress_DeviceIDBinding verifies the (user_id, document,
+// device_id) primary key isolates per-device progress so two devices on the
+// same document for the same user never clobber each other. Before this fix
+// the PK was (user_id, document) and an upsert from device B would silently
+// overwrite device A's last-known position.
+//
+// The test also confirms the cross-user case: even with identical
+// (document, device_id), one user's row cannot overwrite another's — the
+// authenticated-session user_id is part of the PK.
+func TestE3_KosyncProgress_DeviceIDBinding(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	mk := func(user, doc, dev, progress string, pct float64) store.KosyncProgress {
+		return store.KosyncProgress{
+			UserID: user, Document: doc, DeviceID: dev, Progress: progress, Percentage: pct,
+		}
+	}
+
+	// Same user, same document, different devices → two coexisting rows.
+	if err := s.UpsertKosyncProgress(ctx, mk("alice", "doc-x", "kobo-1", "p:10", 0.10)); err != nil {
+		t.Fatalf("upsert dev1: %v", err)
+	}
+	if err := s.UpsertKosyncProgress(ctx, mk("alice", "doc-x", "kindle-1", "p:50", 0.50)); err != nil {
+		t.Fatalf("upsert dev2: %v", err)
+	}
+	// Different user, same document, same device_id → must coexist (user_id is
+	// part of the PK). This is the security-critical case from finding E3:
+	// before the fix, the PK was (user_id, document) and user_id was server-
+	// authenticated; the new PK does not loosen that — device_id widens the
+	// upsert key, never narrows it.
+	if err := s.UpsertKosyncProgress(ctx, mk("bob", "doc-x", "kindle-1", "p:90", 0.90)); err != nil {
+		t.Fatalf("upsert cross-user: %v", err)
+	}
+
+	// Re-upserting alice/doc-x/kindle-1 must overwrite ONLY that tuple.
+	if err := s.UpsertKosyncProgress(ctx, mk("alice", "doc-x", "kindle-1", "p:55", 0.55)); err != nil {
+		t.Fatalf("upsert dev2 again: %v", err)
+	}
+
+	// Read-back returns the latest row for (user, doc) — kindle-1 had the
+	// most recent write so its 0.55 should win.
+	got, err := s.GetKosyncProgress(ctx, "alice", "doc-x")
+	if err != nil {
+		t.Fatalf("GetKosyncProgress alice: %v", err)
+	}
+	if got.Percentage < 0.54 || got.Percentage > 0.56 {
+		t.Errorf("expected latest write (0.55) to win, got %+v", got)
+	}
+	if got.DeviceID != "kindle-1" {
+		t.Errorf("latest write was on kindle-1, got DeviceID=%q", got.DeviceID)
+	}
+
+	// Bob's row for the same (document, device_id) must be untouched.
+	gotBob, err := s.GetKosyncProgress(ctx, "bob", "doc-x")
+	if err != nil {
+		t.Fatalf("GetKosyncProgress bob: %v", err)
+	}
+	if gotBob.Percentage < 0.89 || gotBob.Percentage > 0.91 {
+		t.Errorf("bob's progress was clobbered by alice's upsert: %+v", gotBob)
 	}
 }

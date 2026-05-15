@@ -1,5 +1,5 @@
-// Package backend is the portal's HTTP client for calling an ebook backend
-// (BookWarehouse or EbookDB) via the continuum host plugin proxy.
+// Package backend is the portal's HTTP client for calling ebook backend
+// providers via the continuum host plugin proxy.
 //
 // The host exposes a proxy at:
 //
@@ -21,6 +21,13 @@ import (
 )
 
 const defaultTimeout = 60 * time.Second
+
+// maxResponseBytes caps response bodies read from upstream backend plugins
+// via the host's plugin proxy. Catalog/browse JSON payloads are well under
+// this; cover/file fetches use streaming endpoints (separate code path)
+// and aren't subject to this cap. The cap defends against memory
+// exhaustion if a backend returns a runaway body.
+const maxResponseBytes = 10 << 20 // 10 MiB
 
 // HostHTTPClient is a thin HTTP client that knows how to address the
 // continuum host plugin proxy.
@@ -102,6 +109,9 @@ func (c *HostHTTPClient) do(ctx context.Context, method, installID, pluginPath s
 		return nil, 0, fmt.Errorf("do: %w", err)
 	}
 	defer resp.Body.Close()
-	rb, _ := io.ReadAll(resp.Body)
+	rb, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
+	if err != nil {
+		return nil, 0, fmt.Errorf("read body: %w", err)
+	}
 	return rb, resp.StatusCode, nil
 }

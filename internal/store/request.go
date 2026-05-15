@@ -17,6 +17,7 @@ type Request struct {
 	ISBN            string
 	SourceID        string
 	FormatPref      string
+	MediaType       string
 	Status          string
 	TargetPluginID  string
 	ExternalID      string
@@ -31,12 +32,12 @@ type Request struct {
 
 func (s *Store) InsertRequest(ctx context.Context, r Request) error {
 	_, err := s.pool.Exec(ctx, `
-		INSERT INTO request (id, user_id, title, authors, isbn, source_id, format_pref,
+		INSERT INTO request (id, user_id, title, authors, isbn, source_id, format_pref, media_type,
 		                    status, target_plugin_id, auto_monitor)
 		VALUES ($1, $2, $3, $4, NULLIF($5,''), NULLIF($6,''), NULLIF($7,''),
-		        $8, $9, $10)
+		        COALESCE(NULLIF($8,''), 'book'), $9, $10, $11)
 	`, r.ID, r.UserID, r.Title, r.Authors, r.ISBN, r.SourceID, r.FormatPref,
-		r.Status, r.TargetPluginID, r.AutoMonitor)
+		r.MediaType, r.Status, r.TargetPluginID, r.AutoMonitor)
 	if err != nil {
 		return fmt.Errorf("insert request: %w", err)
 	}
@@ -46,14 +47,14 @@ func (s *Store) InsertRequest(ctx context.Context, r Request) error {
 func (s *Store) GetRequest(ctx context.Context, id string) (Request, error) {
 	row := s.pool.QueryRow(ctx, `
 		SELECT id, user_id, title, authors, COALESCE(isbn,''), COALESCE(source_id,''),
-		       COALESCE(format_pref,''), status, target_plugin_id, COALESCE(external_id,''),
+		       COALESCE(format_pref,''), COALESCE(media_type,'book'), status, target_plugin_id, COALESCE(external_id,''),
 		       auto_monitor, COALESCE(denied_reason,''), COALESCE(failure_reason,''),
 		       COALESCE(fulfilled_book_id,''), created_at, updated_at, fulfilled_at
 		FROM request WHERE id = $1
 	`, id)
 	var r Request
 	if err := row.Scan(&r.ID, &r.UserID, &r.Title, &r.Authors, &r.ISBN, &r.SourceID,
-		&r.FormatPref, &r.Status, &r.TargetPluginID, &r.ExternalID,
+		&r.FormatPref, &r.MediaType, &r.Status, &r.TargetPluginID, &r.ExternalID,
 		&r.AutoMonitor, &r.DeniedReason, &r.FailureReason,
 		&r.FulfilledBookID, &r.CreatedAt, &r.UpdatedAt, &r.FulfilledAt); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -70,11 +71,32 @@ func (s *Store) ListRequestsByUser(ctx context.Context, userID string, limit int
 	}
 	return s.queryRequests(ctx, `
 		SELECT id, user_id, title, authors, COALESCE(isbn,''), COALESCE(source_id,''),
-		       COALESCE(format_pref,''), status, target_plugin_id, COALESCE(external_id,''),
+		       COALESCE(format_pref,''), COALESCE(media_type,'book'), status, target_plugin_id, COALESCE(external_id,''),
 		       auto_monitor, COALESCE(denied_reason,''), COALESCE(failure_reason,''),
 		       COALESCE(fulfilled_book_id,''), created_at, updated_at, fulfilled_at
 		FROM request WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2
 	`, userID, limit)
+}
+
+func (s *Store) GetRequestForUser(ctx context.Context, id, userID string) (Request, error) {
+	row := s.pool.QueryRow(ctx, `
+		SELECT id, user_id, title, authors, COALESCE(isbn,''), COALESCE(source_id,''),
+		       COALESCE(format_pref,''), COALESCE(media_type,'book'), status, target_plugin_id, COALESCE(external_id,''),
+		       auto_monitor, COALESCE(denied_reason,''), COALESCE(failure_reason,''),
+		       COALESCE(fulfilled_book_id,''), created_at, updated_at, fulfilled_at
+		FROM request WHERE id = $1 AND user_id = $2
+	`, id, userID)
+	var r Request
+	if err := row.Scan(&r.ID, &r.UserID, &r.Title, &r.Authors, &r.ISBN, &r.SourceID,
+		&r.FormatPref, &r.MediaType, &r.Status, &r.TargetPluginID, &r.ExternalID,
+		&r.AutoMonitor, &r.DeniedReason, &r.FailureReason,
+		&r.FulfilledBookID, &r.CreatedAt, &r.UpdatedAt, &r.FulfilledAt); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return Request{}, ErrNotFound
+		}
+		return Request{}, fmt.Errorf("get request for user: %w", err)
+	}
+	return r, nil
 }
 
 func (s *Store) ListRequestsByStatus(ctx context.Context, status string, limit int) ([]Request, error) {
@@ -83,7 +105,7 @@ func (s *Store) ListRequestsByStatus(ctx context.Context, status string, limit i
 	}
 	return s.queryRequests(ctx, `
 		SELECT id, user_id, title, authors, COALESCE(isbn,''), COALESCE(source_id,''),
-		       COALESCE(format_pref,''), status, target_plugin_id, COALESCE(external_id,''),
+		       COALESCE(format_pref,''), COALESCE(media_type,'book'), status, target_plugin_id, COALESCE(external_id,''),
 		       auto_monitor, COALESCE(denied_reason,''), COALESCE(failure_reason,''),
 		       COALESCE(fulfilled_book_id,''), created_at, updated_at, fulfilled_at
 		FROM request WHERE status = $1 ORDER BY created_at DESC LIMIT $2
@@ -96,7 +118,7 @@ func (s *Store) ListNonTerminal(ctx context.Context, limit int) ([]Request, erro
 	}
 	return s.queryRequests(ctx, `
 		SELECT id, user_id, title, authors, COALESCE(isbn,''), COALESCE(source_id,''),
-		       COALESCE(format_pref,''), status, target_plugin_id, COALESCE(external_id,''),
+		       COALESCE(format_pref,''), COALESCE(media_type,'book'), status, target_plugin_id, COALESCE(external_id,''),
 		       auto_monitor, COALESCE(denied_reason,''), COALESCE(failure_reason,''),
 		       COALESCE(fulfilled_book_id,''), created_at, updated_at, fulfilled_at
 		FROM request WHERE status NOT IN ('fulfilled','failed','denied','cancelled')
@@ -149,7 +171,7 @@ func (s *Store) queryRequests(ctx context.Context, sql string, args ...any) ([]R
 	for rows.Next() {
 		var r Request
 		if err := rows.Scan(&r.ID, &r.UserID, &r.Title, &r.Authors, &r.ISBN, &r.SourceID,
-			&r.FormatPref, &r.Status, &r.TargetPluginID, &r.ExternalID,
+			&r.FormatPref, &r.MediaType, &r.Status, &r.TargetPluginID, &r.ExternalID,
 			&r.AutoMonitor, &r.DeniedReason, &r.FailureReason,
 			&r.FulfilledBookID, &r.CreatedAt, &r.UpdatedAt, &r.FulfilledAt); err != nil {
 			return nil, fmt.Errorf("scan: %w", err)

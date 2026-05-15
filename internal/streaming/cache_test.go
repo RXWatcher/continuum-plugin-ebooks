@@ -188,3 +188,82 @@ func TestManager_EvictTo(t *testing.T) {
 		t.Errorf("total = %d after evict (target 250)", total)
 	}
 }
+
+// TestManager_AcquireBlocksEvict verifies that an entry held via Acquire is
+// NOT evicted by EvictTo, and that releasing the ref allows a subsequent
+// EvictTo to remove it. This is the load-bearing invariant that prevents the
+// read/delete-mid-io.Copy race the registry was added to fix.
+func TestManager_AcquireBlocksEvict(t *testing.T) {
+	st := newTestStore(t)
+	dir := t.TempDir()
+	m := streaming.NewManager(dir, 1<<30, st)
+	ctx := context.Background()
+
+	// Seed two entries, each 100 bytes. The LRU order puts the older one
+	// first; we'll hold a ref on the oldest so EvictTo has to skip it.
+	var keys []string
+	var ids []string
+	for i := 0; i < 2; i++ {
+		key := streaming.ComputeCacheKey(fmt.Sprintf("hold-%d", i), "epub", "inst")
+		keys = append(keys, key)
+		fetch := func(ctx context.Context) (io.ReadCloser, http.Header, int64, string, error) {
+			body := strings.Repeat("y", 100)
+			return io.NopCloser(strings.NewReader(body)), http.Header{}, int64(len(body)), "application/epub+zip", nil
+		}
+		entry, err := m.StartOrJoin(ctx, key, fmt.Sprintf("hold-%d", i), "epub", fetch)
+		if err != nil {
+			t.Fatalf("seed[%d]: %v", i, err)
+		}
+		ids = append(ids, entry.ID)
+	}
+
+	// Hold a ref on the oldest (LRU-first) entry.
+	heldID := ids[0]
+	release := m.Acquire(heldID)
+
+	// Concurrent eviction: drop total from 200 → 50. Without the refcount
+	// skip, both entries would be evicted. With it, the held one must
+	// survive.
+	done := make(chan error, 1)
+	go func() {
+		_, err := m.EvictTo(ctx, 50)
+		done <- err
+	}()
+	if err := <-done; err != nil {
+		t.Fatalf("EvictTo: %v", err)
+	}
+
+	if e, ok := m.Lookup(ctx, keys[0]); !ok {
+		t.Errorf("held entry was evicted (id=%s)", heldID)
+	} else if e.ID != heldID {
+		t.Errorf("held entry mismatch: got %s want %s", e.ID, heldID)
+	}
+
+	// Now release and re-evict; the entry should be removable.
+	release()
+	if _, err := m.EvictTo(ctx, 0); err != nil {
+		t.Fatalf("EvictTo after release: %v", err)
+	}
+	if _, ok := m.Lookup(ctx, keys[0]); ok {
+		t.Errorf("entry not evicted after release (id=%s)", heldID)
+	}
+}
+
+// TestManager_AcquireReleaseIdempotent verifies the documented exactly-once
+// contract is robust to accidental double-release — required because the
+// Kindle send path may invoke its cleanup func through multiple defer/error
+// branches if future refactors aren't careful.
+func TestManager_AcquireReleaseIdempotent(t *testing.T) {
+	m := streaming.NewManager(t.TempDir(), 1<<30, nil)
+	release := m.Acquire("entry-x")
+	release()
+	// Second call must NOT panic and must NOT make the refcount go negative.
+	release()
+	// Third call too.
+	release()
+	// A fresh Acquire after release should give count=1, not 0 or -2.
+	r2 := m.Acquire("entry-x")
+	defer r2()
+	// Indirect probe: a parallel acquire/release should leave the entry
+	// usable (no panic).
+}

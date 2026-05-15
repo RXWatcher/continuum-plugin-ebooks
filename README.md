@@ -1,37 +1,48 @@
 # continuum-plugin-ebooks
 
-Continuum plugin: customer-facing ebook portal — browse, read in browser
-(epub.js), OPDS catalog feed, KOReader kosync, send to Kobo (KEPUB) and
-Kindle (email), request flow, admin.
+Customer-facing ebook portal for Continuum. Browser-based reader (epub.js), OPDS catalog feed for third-party reader apps, KOReader kosync compatibility, send-to-Kobo (KEPUB conversion via kepubify), send-to-Kindle (SMTP), request flow, admin SPA.
 
-See `/opt/worktrees/continuum-rh/docs/superpowers/specs/2026-05-11-ebooks-portal-and-backends-design.md`.
+This plugin is the **portal**, not a source of ebooks. Pair it with one or more
+`ebook_backend.v1` providers such as `continuum.local-ebooks` for local files
+or `continuum.annas-archive-downloader` for Anna's Archive downloads.
 
-## Build
+## Capabilities
 
-```bash
-cd web && pnpm install && pnpm run build
-cd ..
-go build ./cmd/continuum-plugin-ebooks
-```
+| Capability | Notes |
+|---|---|
+| `http_routes.v1` (`portal`) | SPA, REST API, OPDS feed, kosync endpoints, Kobo + Kindle send routes. Navigation label "Ebooks". |
+| `event_consumer.v1` | Listens to backend `request_*` events from ebook request providers. |
+| `scheduled_task.v1` × 5 | `request_reconciler` (1m), `cache_evictor` (5m), `kobo_session_reaper` (5m), `opds_token_pruner` (daily), `kindle_send_retrier` (2m). |
+| `request_router.v1` | Accepts routed ebook requests from `continuum.requests`. |
 
-The `web/dist/` output is embedded into the Go binary via `web/embed.go`.
+## Configuration
 
-## Test
+| Key | Required | Description |
+|---|---|---|
+| `database_url` | yes | DSN for the `ebooks` Postgres schema. |
+| `cache_dir` | no | If set, enables disk-cache streaming mode. |
+| `cache_max_size_gb` | no | Disk-cache cap (default 10). |
+| `cache_download_concurrency` | no | Parallel-download budget (default 4). |
+| `default_streaming_mode` | no | `proxy` (live forward) or `cache` (LRU disk). |
+| `kepubify_path` | no | Path to the kepubify binary (default `/usr/local/bin/kepubify`). |
+| `kindle_smtp_config` | no | JSON: `{"host","port","username","password","from","tls"}` for send-to-Kindle. |
+| `opds_realm` | no | Basic-auth realm string for OPDS. |
+| `path_remappings` | no | Reserved for future use. |
+| `auto_approve_requests` | no | Skip the admin approval queue. |
+| `target_backend_plugin_id` | no | Plugin ID of the active `ebook_backend.v1` provider. |
+| `standalone_http_listen` | no | Same model as the [`audiobooks`](../continuum-plugin-audiobooks/) plugin — bind a second TCP listener for client-app surfaces (KOReader, OPDS readers). |
 
-```bash
-go test ./...        # requires Postgres for store + streaming integration tests
-cd web && pnpm run build  # tsc + vite type-check / production build
-```
+## Dependencies
 
-`TEST_DATABASE_URL` overrides the default
-`postgres://continuum:continuum@localhost:5432/continuum?sslmode=disable` for
-the Go integration tests.
+- Postgres role + `ebooks` schema.
+- A writable cache directory if disk-cache streaming is enabled.
+- `kepubify` binary on PATH for send-to-Kobo.
+- SMTP credentials for send-to-Kindle.
+- One or more `ebook_backend.v1` provider plugins.
 
-## Operator runbook
+## Install
 
 ### 1. Postgres pre-flight
-
-The plugin owns one schema in the host's Postgres database.
 
 ```sql
 CREATE ROLE plugin_ebooks WITH LOGIN PASSWORD '<chosen>';
@@ -51,46 +62,23 @@ wget -O /usr/local/bin/kepubify \
 chmod +x /usr/local/bin/kepubify
 ```
 
-### 3. Upload + configure via admin UI
+### 3. Configure via admin UI
 
-After uploading the built binary as a plugin archive, the admin UI exposes
-the following config keys (see manifest.json `global_config_schema`):
+Configure `database_url` and `target_backend_plugin_id`, plus any optional feature switches you want enabled.
 
-| Key | Required | Notes |
-|-----|----------|-------|
-| `database_url` | yes | `postgres://plugin_ebooks:<pwd>@host/continuum?search_path=ebooks` |
-| `cache_dir` | optional | If set, enables disk-cache streaming mode. |
-| `cache_max_size_gb` | optional | Defaults to 10. |
-| `cache_download_concurrency` | optional | Defaults to 4. |
-| `default_streaming_mode` | optional | `proxy` (live forward) or `cache` (LRU disk). |
-| `kepubify_path` | optional | Defaults to `/usr/local/bin/kepubify`. |
-| `kindle_smtp_config` | optional | JSON: `{"host","port","username","password","from","tls"}` |
-| `opds_realm` | optional | OPDS basic-auth realm string. |
-| `path_remappings` | optional | JSON array (reserved for future use). |
-| `auto_approve_requests` | optional | Skip the admin approval queue. |
-| `target_backend_plugin_id` | optional | Plugin id of the active `ebook_backend.v1`. |
+## Build & test
 
-### 4. Capabilities exposed
+```bash
+cd web && pnpm install && pnpm run build
+cd ..
+go build ./cmd/continuum-plugin-ebooks
 
-* `http_routes.v1` — serves the SPA + REST API + OPDS + kosync + Kobo
-* `event_consumer.v1` — listens to `request_*` from bookwarehouse-ebook + ebookdb
-* `scheduled_task.v1` — `request_reconciler` (1m), `cache_evictor` (5m),
-  `kobo_session_reaper` (5m), `opds_token_pruner` (daily), `kindle_send_retrier` (2m)
-* `request_router.v1` — accepts ebook requests routed from the requests plugin
-
-## Architecture overview
-
+go test ./...                       # requires Postgres for integration tests
+cd web && pnpm run build            # tsc + vite type-check / production build
 ```
-SPA  (web/)               React 19 + Tailwind v4 + shadcn (zinc, new-york)
- │
-HTTP (chi router)         /api/v1/*  /opds/*  /kosync/*  /kobo/*
- │
-internal/server           handlers
-internal/streaming        cache mode (LRU + single-flight) + proxy mode
-internal/backend          host-proxy client + typed EbookBackend facade
-internal/store            pgx wrappers for all 11 portal tables
-internal/scheduler        5 cron tasks
-internal/consumer         event_consumer.v1 handler
-internal/kindle           gomail.v2 SMTP sender
-internal/auth             identity middleware (reads host-injected headers)
-```
+
+The `web/dist/` output is embedded into the Go binary via `web/embed.go`. `TEST_DATABASE_URL` overrides the default `postgres://continuum:continuum@localhost:5432/continuum?sslmode=disable` for the Go integration tests.
+
+## Status
+
+v0.1.0, beta. Browser reader, OPDS, kosync, Kobo, and Kindle send paths are all wired; expect rough edges around session lifecycle and SMTP retries.

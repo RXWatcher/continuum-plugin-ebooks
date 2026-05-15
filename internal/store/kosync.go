@@ -94,13 +94,19 @@ func (s *Store) DeleteKosyncUser(ctx context.Context, username string) error {
 	return nil
 }
 
+// UpsertKosyncProgress writes progress scoped to (user_id, document, device_id).
+// device_id collapses to ” when the client omits it so the legacy "no device"
+// case still has a stable upsert key. UserID is the authenticated session's
+// identity — callers MUST NOT take it from the request body or any
+// client-supplied field, otherwise a malicious client can overwrite another
+// user's progress.
 func (s *Store) UpsertKosyncProgress(ctx context.Context, p KosyncProgress) error {
 	_, err := s.pool.Exec(ctx, `
 		INSERT INTO kosync_progress (user_id, document, progress, percentage, device, device_id, timestamp)
-		VALUES ($1, $2, $3, $4, NULLIF($5,''), NULLIF($6,''), now())
-		ON CONFLICT (user_id, document) DO UPDATE SET
+		VALUES ($1, $2, $3, $4, NULLIF($5,''), $6, now())
+		ON CONFLICT (user_id, document, device_id) DO UPDATE SET
 			progress = EXCLUDED.progress, percentage = EXCLUDED.percentage,
-			device = EXCLUDED.device, device_id = EXCLUDED.device_id, timestamp = now()
+			device = EXCLUDED.device, timestamp = now()
 	`, p.UserID, p.Document, p.Progress, p.Percentage, p.Device, p.DeviceID)
 	if err != nil {
 		return fmt.Errorf("upsert kosync_progress: %w", err)
@@ -108,10 +114,15 @@ func (s *Store) UpsertKosyncProgress(ctx context.Context, p KosyncProgress) erro
 	return nil
 }
 
+// GetKosyncProgress returns the most-recent progress row for (user_id,
+// document) across all of that user's devices. KOReader's contract is "latest
+// wins on read", so we order by timestamp DESC and return the freshest tuple;
+// the device_id PK only protects against cross-device clobbering on writes.
 func (s *Store) GetKosyncProgress(ctx context.Context, userID, document string) (KosyncProgress, error) {
 	row := s.pool.QueryRow(ctx, `
-		SELECT user_id, document, progress, percentage, COALESCE(device,''), COALESCE(device_id,''), timestamp
+		SELECT user_id, document, progress, percentage, COALESCE(device,''), device_id, timestamp
 		FROM kosync_progress WHERE user_id = $1 AND document = $2
+		ORDER BY timestamp DESC LIMIT 1
 	`, userID, document)
 	var p KosyncProgress
 	if err := row.Scan(&p.UserID, &p.Document, &p.Progress, &p.Percentage, &p.Device, &p.DeviceID, &p.Timestamp); err != nil {

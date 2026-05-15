@@ -20,6 +20,9 @@ import (
 //   - the filesystem layout under <dir>/<sha[:2]>/<sha>
 //   - an in-memory single-flight map keyed by cache_key
 //   - DB transitions on ebook_file_cache (pending → ready/failed)
+//   - an in-process reference count of cache entries currently being read,
+//     used by EvictTo to skip in-flight serves and avoid the
+//     read/delete-mid-io.Copy race that produced mid-transfer 410/EOF errors.
 //
 // Lookup hits return immediately. A miss promotes the calling goroutine to
 // leader for that key: the leader streams the upstream body to a temp file,
@@ -30,6 +33,9 @@ type Manager struct {
 	maxBytes int64
 	store    *store.Store
 	inflight sync.Map // cache_key -> *download
+
+	refMu sync.Mutex
+	refs  map[string]int // entry.ID → active reader count
 }
 
 // Fetcher returns the upstream body. content-length/mime-type are advisory
@@ -45,7 +51,41 @@ type download struct {
 // NewManager constructs a Manager rooted at dir with the given LRU max-size.
 // maxBytes ≤ 0 means "evictor turned off" (used in tests).
 func NewManager(dir string, maxBytes int64, st *store.Store) *Manager {
-	return &Manager{dir: dir, maxBytes: maxBytes, store: st}
+	return &Manager{
+		dir:      dir,
+		maxBytes: maxBytes,
+		store:    st,
+		refs:     make(map[string]int),
+	}
+}
+
+// Acquire increments the active-reader count for entry id and returns a
+// release closure. Callers MUST defer the release exactly once. The returned
+// closure is idempotent across repeated calls — only the first call decrements.
+// EvictTo skips entries whose count is > 0.
+func (m *Manager) Acquire(id string) (release func()) {
+	m.refMu.Lock()
+	m.refs[id]++
+	m.refMu.Unlock()
+	var released bool
+	return func() {
+		m.refMu.Lock()
+		defer m.refMu.Unlock()
+		if released {
+			return
+		}
+		released = true
+		m.refs[id]--
+		if m.refs[id] <= 0 {
+			delete(m.refs, id)
+		}
+	}
+}
+
+// inUse reports whether id currently has any active readers. Caller must
+// hold m.refMu.
+func (m *Manager) inUse(id string) bool {
+	return m.refs[id] > 0
 }
 
 // Dir returns the on-disk root.
@@ -175,8 +215,10 @@ func combineErr(a, b error) error {
 }
 
 // EvictTo deletes least-recently-used ready rows (and their on-disk files)
-// until the total bytes_on_disk drops at or below targetBytes. Returns the
-// number of entries evicted.
+// until the total bytes_on_disk drops at or below targetBytes. Entries with a
+// non-zero in-process reader refcount are skipped — they'll be reconsidered
+// on the next sweep once readers release. Returns the number of entries
+// evicted.
 func (m *Manager) EvictTo(ctx context.Context, targetBytes int64) (int, error) {
 	total, err := m.store.TotalCacheBytes(ctx)
 	if err != nil {
@@ -193,6 +235,12 @@ func (m *Manager) EvictTo(ctx context.Context, targetBytes int64) (int, error) {
 	for _, e := range entries {
 		if total <= targetBytes {
 			break
+		}
+		m.refMu.Lock()
+		busy := m.inUse(e.ID)
+		m.refMu.Unlock()
+		if busy {
+			continue
 		}
 		_ = os.Remove(m.PathFor(e))
 		if err := m.store.DeleteCacheEntry(ctx, e.ID); err == nil {

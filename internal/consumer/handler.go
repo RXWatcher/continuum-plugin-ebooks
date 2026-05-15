@@ -1,6 +1,6 @@
 // Package consumer implements the event_consumer.v1 handler that processes
 // backend-emitted events (request_acknowledged/status_changed/fulfilled/failed)
-// for both bookwarehouse-ebook and ebookdb backends.
+// from ebook request providers.
 package consumer
 
 import (

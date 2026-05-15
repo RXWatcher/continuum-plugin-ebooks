@@ -11,7 +11,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -35,14 +37,14 @@ func (s *Server) mountOPDS(r chi.Router) {
 }
 
 type opdsFeed struct {
-	XMLName  xml.Name    `xml:"feed"`
-	XMLNS    string      `xml:"xmlns,attr"`
-	XMLNSOPDS string     `xml:"xmlns:opds,attr,omitempty"`
-	ID       string      `xml:"id"`
-	Title    string      `xml:"title"`
-	Updated  string      `xml:"updated"`
-	Links    []opdsLink  `xml:"link"`
-	Entries  []opdsEntry `xml:"entry"`
+	XMLName   xml.Name    `xml:"feed"`
+	XMLNS     string      `xml:"xmlns,attr"`
+	XMLNSOPDS string      `xml:"xmlns:opds,attr,omitempty"`
+	ID        string      `xml:"id"`
+	Title     string      `xml:"title"`
+	Updated   string      `xml:"updated"`
+	Links     []opdsLink  `xml:"link"`
+	Entries   []opdsEntry `xml:"entry"`
 }
 
 type opdsEntry struct {
@@ -77,7 +79,65 @@ func (s *Server) handleOPDSRoot(w http.ResponseWriter, r *http.Request) {
 			{Rel: "search", Type: "application/opensearchdescription+xml", Href: "/opds/search"},
 		},
 	}
-	writeOPDS(w, feed)
+	writeOPDS(w, r, feed)
+}
+
+// opdsCatalogLimit reads ?limit= and clamps it to [1,200], defaulting to 50.
+// Matches the user-facing /api/v1/ebooks limit semantics.
+func opdsCatalogLimit(r *http.Request) int {
+	limit := 50
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if n, err := strconv.Atoi(l); err == nil && n > 0 {
+			limit = n
+		}
+	}
+	if limit > 200 {
+		limit = 200
+	}
+	return limit
+}
+
+// buildOPDSCatalogFeed assembles the catalog feed from a backend page
+// envelope. Extracted so tests can exercise pagination-link emission without
+// needing a real Store or backend wired up.
+func buildOPDSCatalogFeed(env backend.PageEnvelope[backend.EbookSummary], realm string, limit int, now time.Time) opdsFeed {
+	feed := opdsFeed{
+		XMLNS:   "http://www.w3.org/2005/Atom",
+		ID:      "tag:continuum:ebooks:opds:catalog",
+		Title:   realm + " — Catalog",
+		Updated: now.UTC().Format(time.RFC3339),
+		Links: []opdsLink{
+			{Rel: "self", Type: "application/atom+xml;profile=opds-catalog;kind=acquisition", Href: "/opds/catalog"},
+		},
+	}
+	// Emit rel="next" when the backend signals more pages. The catalog feed
+	// would otherwise silently truncate at `limit`; cursor-based pagination
+	// matches the backend's PageEnvelope.NextCursor shape, so we just forward
+	// the opaque cursor token along with the requested limit.
+	if env.NextCursor != "" {
+		feed.Links = append(feed.Links, opdsLink{
+			Rel:  "next",
+			Type: "application/atom+xml;profile=opds-catalog;kind=acquisition",
+			Href: fmt.Sprintf("/opds/catalog?cursor=%s&limit=%d", url.QueryEscape(env.NextCursor), limit),
+		})
+	}
+	for _, b := range env.Items {
+		entry := opdsEntry{
+			ID: "tag:continuum:ebooks:book:" + b.ID, Title: b.Title,
+			Updated: now.UTC().Format(time.RFC3339),
+		}
+		for _, a := range b.Authors {
+			entry.Authors = append(entry.Authors, opdsAuth{Name: a})
+		}
+		for _, f := range b.Formats {
+			entry.Links = append(entry.Links, opdsLink{
+				Rel: "http://opds-spec.org/acquisition", Type: formatMime(f),
+				Href: fmt.Sprintf("/opds/book/%s/download/%s", b.ID, f),
+			})
+		}
+		feed.Entries = append(feed.Entries, entry)
+	}
+	return feed
 }
 
 func (s *Server) handleOPDSCatalog(w http.ResponseWriter, r *http.Request) {
@@ -91,37 +151,17 @@ func (s *Server) handleOPDSCatalog(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	bk := backend.NewEbookBackend(s.deps.Host, cfg.TargetBackendPluginID)
-	env, err := bk.ListCatalog(r.Context(), "", "added", "desc", 50)
+	limit := opdsCatalogLimit(r)
+	cursor := r.URL.Query().Get("cursor")
+	env, err := bk.ListCatalog(r.Context(), backend.CatalogQuery{
+		Sort: "added", Order: "desc", Limit: limit, Cursor: cursor,
+	})
 	if err != nil {
 		writeErr(w, 502, err.Error())
 		return
 	}
-	feed := opdsFeed{
-		XMLNS:   "http://www.w3.org/2005/Atom",
-		ID:      "tag:continuum:ebooks:opds:catalog",
-		Title:   cfg.OpdsRealm + " — Catalog",
-		Updated: time.Now().UTC().Format(time.RFC3339),
-		Links: []opdsLink{
-			{Rel: "self", Type: "application/atom+xml;profile=opds-catalog;kind=acquisition", Href: "/opds/catalog"},
-		},
-	}
-	for _, b := range env.Items {
-		entry := opdsEntry{
-			ID: "tag:continuum:ebooks:book:" + b.ID, Title: b.Title,
-			Updated: time.Now().UTC().Format(time.RFC3339),
-		}
-		for _, a := range b.Authors {
-			entry.Authors = append(entry.Authors, opdsAuth{Name: a})
-		}
-		for _, f := range b.Formats {
-			entry.Links = append(entry.Links, opdsLink{
-				Rel: "http://opds-spec.org/acquisition", Type: formatMime(f),
-				Href: fmt.Sprintf("/opds/book/%s/download/%s", b.ID, f),
-			})
-		}
-		feed.Entries = append(feed.Entries, entry)
-	}
-	writeOPDS(w, feed)
+	feed := buildOPDSCatalogFeed(env, cfg.OpdsRealm, limit, time.Now())
+	writeOPDS(w, r, feed)
 }
 
 func (s *Server) handleOPDSSearch(w http.ResponseWriter, r *http.Request) {
@@ -174,7 +214,7 @@ func (s *Server) handleOPDSSearch(w http.ResponseWriter, r *http.Request) {
 		}
 		feed.Entries = append(feed.Entries, entry)
 	}
-	writeOPDS(w, feed)
+	writeOPDS(w, r, feed)
 }
 
 func (s *Server) handleOPDSBookEntry(w http.ResponseWriter, r *http.Request) {
@@ -240,7 +280,40 @@ func (s *Server) handleOPDSDownload(w http.ResponseWriter, r *http.Request) {
 	_, _ = io.Copy(w, resp.Body)
 }
 
-func writeOPDS(w http.ResponseWriter, f opdsFeed) {
+// opdsFeedETag derives a weak ETag from the feed's entry identifiers and the
+// link Hrefs (so the next-cursor link is part of the cache key — clients that
+// pinned page 1 must invalidate when a new book pushes the head). We use SHA-1
+// truncated to 16 hex chars; the value is wrapped W/"..." since the underlying
+// XML is not byte-stable (timestamps in Updated change per request).
+func opdsFeedETag(f opdsFeed) string {
+	h := sha1.New()
+	for _, e := range f.Entries {
+		_, _ = io.WriteString(h, e.ID)
+		_, _ = io.WriteString(h, "|")
+		_, _ = io.WriteString(h, e.Updated)
+		_, _ = io.WriteString(h, "\n")
+	}
+	for _, lk := range f.Links {
+		_, _ = io.WriteString(h, lk.Rel)
+		_, _ = io.WriteString(h, "=")
+		_, _ = io.WriteString(h, lk.Href)
+		_, _ = io.WriteString(h, "\n")
+	}
+	return fmt.Sprintf(`W/"%s"`, hex.EncodeToString(h.Sum(nil))[:16])
+}
+
+// writeOPDS serialises an OPDS feed with HTTP caching headers. Clients that
+// resend a matching If-None-Match get 304; otherwise we emit a weak ETag and a
+// 60-second private Cache-Control so polling OPDS clients don't re-download
+// the full feed every refresh.
+func writeOPDS(w http.ResponseWriter, r *http.Request, f opdsFeed) {
+	etag := opdsFeedETag(f)
+	w.Header().Set("ETag", etag)
+	w.Header().Set("Cache-Control", "private, max-age=60")
+	if match := r.Header.Get("If-None-Match"); match != "" && match == etag {
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
 	w.Header().Set("Content-Type", "application/atom+xml;profile=opds-catalog;kind=acquisition")
 	_, _ = w.Write([]byte(xml.Header))
 	_ = xml.NewEncoder(w).Encode(f)
@@ -446,6 +519,12 @@ func (s *Server) handleKosyncPutProgress(w http.ResponseWriter, r *http.Request)
 		writeErr(w, 400, err.Error())
 		return
 	}
+	// UserID is taken from the authenticated kosync session (u.UserID), never
+	// from the request body — otherwise a malicious client could clobber any
+	// other user's progress by lying about who they are. DeviceID is
+	// client-supplied but bound to the authenticated user via the
+	// (user_id, document, device_id) primary key, so a malicious client can
+	// only collide with rows owned by their own user.
 	if err := s.deps.Store.UpsertKosyncProgress(r.Context(), store.KosyncProgress{
 		UserID: u.UserID, Document: body.Document, Progress: body.Progress,
 		Percentage: body.Percentage, Device: body.Device, DeviceID: body.DeviceID,
@@ -494,10 +573,31 @@ func (s *Server) mountKobo(r chi.Router) {
 	r.Get("/{code}", s.handleKoboServeFile)
 }
 
+// findKoboSessionForCode walks an active-session list and returns the first
+// row whose stored CodeHash bcrypt-matches the URL-supplied code. Extracted
+// so tests can exercise the hash-comparison loop without a real DB.
+func findKoboSessionForCode(sessions []store.KoboSession, code string) (store.KoboSession, bool) {
+	for _, candidate := range sessions {
+		if bcrypt.CompareHashAndPassword([]byte(candidate.CodeHash), []byte(code)) == nil {
+			return candidate, true
+		}
+	}
+	return store.KoboSession{}, false
+}
+
 func (s *Server) handleKoboServeFile(w http.ResponseWriter, r *http.Request) {
 	code := chi.URLParam(r, "code")
-	sess, err := s.deps.Store.GetKoboSessionByCode(r.Context(), code)
+	// Scan pending/active sessions and bcrypt-compare each row's hash against
+	// the URL-supplied code. The pending/active partial index keeps this set
+	// small in practice (sessions expire after 30m), and bcrypt's
+	// constant-time compare deflates timing-distinguisher attacks across rows.
+	sessions, err := s.deps.Store.ListActiveKoboSessions(r.Context(), time.Now())
 	if err != nil {
+		writeErr(w, 500, err.Error())
+		return
+	}
+	sess, matched := findKoboSessionForCode(sessions, code)
+	if !matched {
 		writeErr(w, 404, "not found")
 		return
 	}
@@ -505,7 +605,15 @@ func (s *Server) handleKoboServeFile(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 410, "session expired")
 		return
 	}
-	_ = s.deps.Store.MarkKoboActive(r.Context(), code)
+	// Hold an in-process refcount on this session for the duration of the
+	// transfer so KoboSessionReaper can't unlink sess.SourcePath while we're
+	// mid-io.Copy. Refcount only blocks NEW evictions — if a past reap
+	// already removed the file, os.Open returns 410 below.
+	if s.deps.KoboRefs != nil {
+		release := s.deps.KoboRefs.Acquire(sess.ID)
+		defer release()
+	}
+	_ = s.deps.Store.MarkKoboActiveByID(r.Context(), sess.ID)
 	f, err := os.Open(sess.SourcePath)
 	if err != nil {
 		writeErr(w, 410, "file gone")
@@ -519,5 +627,5 @@ func (s *Server) handleKoboServeFile(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Disposition", "attachment; filename=\"book.kepub.epub\"")
 	_, _ = io.Copy(w, f)
-	_ = s.deps.Store.MarkKoboCompleted(r.Context(), code)
+	_ = s.deps.Store.MarkKoboCompletedByID(r.Context(), sess.ID)
 }

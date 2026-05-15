@@ -1,8 +1,9 @@
 {
   "plugin_id": "continuum.ebooks",
   "version": "0.1.0",
-  "checksum": "__CHECKSUM__",
+  "checksum": "2d40cf3f8869e72a78ca02aed11efdf2ff38c302bd9801df218f90c91a4ad13a",
   "continuum_api_version": "v1",
+  "supported_platforms": [{"os": "linux", "arch": "amd64"}],
   "capabilities": [
     {"type": "http_routes.v1", "id": "spa", "display_name": "Ebooks portal",
      "description": "Customer-facing ebooks portal: SPA + OPDS + KOReader kosync + Kobo + Kindle send + admin."},
@@ -11,14 +12,10 @@
       "id": "request_watcher",
       "display_name": "Watch backend request events",
       "subscriptions": [
-        "plugin.continuum.bookwarehouse-ebook.request_acknowledged",
-        "plugin.continuum.bookwarehouse-ebook.request_failed",
-        "plugin.continuum.bookwarehouse-ebook.request_status_changed",
-        "plugin.continuum.bookwarehouse-ebook.request_fulfilled",
-        "plugin.continuum.ebookdb.request_acknowledged",
-        "plugin.continuum.ebookdb.request_failed",
-        "plugin.continuum.ebookdb.request_status_changed",
-        "plugin.continuum.ebookdb.request_fulfilled"
+        "plugin.continuum.annas-archive-downloader.request_acknowledged",
+        "plugin.continuum.annas-archive-downloader.request_failed",
+        "plugin.continuum.annas-archive-downloader.request_status_changed",
+        "plugin.continuum.annas-archive-downloader.request_fulfilled"
       ]
     },
     {"type": "scheduled_task.v1", "id": "request_reconciler",
@@ -35,11 +32,13 @@
   ],
   "http_routes": [
     {"id": "assets", "method": "GET", "path": "/assets/*", "access": "public"},
+    {"id": "admin_assets", "method": "GET", "path": "/admin/assets/*", "access": "public"},
     {"id": "index", "method": "GET", "path": "/", "access": "public"},
     {"id": "opds", "method": "*", "path": "/opds/*", "access": "public"},
     {"id": "kosync", "method": "*", "path": "/kosync/*", "access": "public"},
     {"id": "kobo", "method": "*", "path": "/kobo/*", "access": "public"},
     {"id": "api", "method": "*", "path": "/api/v1/*", "access": "authenticated"},
+    {"id": "admin", "method": "GET", "path": "/admin/*", "access": "admin", "navigable": true, "navigation_label": "Ebooks", "navigation_kind": "admin"},
     {"id": "app", "method": "GET", "path": "/*", "access": "authenticated", "navigable": true, "navigation_label": "Ebooks", "navigation_kind": "user"}
   ],
   "global_config_schema": [
@@ -77,9 +76,13 @@
     {"key": "auto_approve_requests", "title": "Auto-approve requests",
      "json_schema": "{\"type\":\"object\",\"properties\":{\"value\":{\"type\":\"boolean\"}}}",
      "admin_form": {"fields": [{"key": "value", "label": "Enabled", "control": "ADMIN_FORM_CONTROL_CHECKBOX"}]}},
-    {"key": "target_backend_plugin_id", "title": "Target backend plugin",
-     "description": "Plugin install id of the ebook_backend.v1 plugin to use.",
+    {"key": "target_backend_plugin_id", "title": "Default download provider",
+     "description": "Plugin install id of the request/download provider to use by default.",
      "json_schema": "{\"type\":\"object\",\"properties\":{\"value\":{\"type\":\"string\"}}}",
-     "admin_form": {"fields": [{"key": "value", "label": "Plugin ID", "control": "ADMIN_FORM_CONTROL_TEXT"}]}}
+     "admin_form": {"fields": [{"key": "value", "label": "Plugin ID", "control": "ADMIN_FORM_CONTROL_TEXT"}]}},
+    {"key": "standalone_http_listen", "title": "Standalone HTTP listen address",
+     "description": "Optional. When set (e.g. ':7878' or '127.0.0.1:7878'), the plugin serves its HTTP routes directly on this address so operators can reverse-proxy a hostname (e.g. ebooks.example.com) to it. Public client-app routes (OPDS, kosync, Kobo, Kindle inbound) work normally there; protected SPA routes 401 (no Continuum session). Changing this requires a plugin restart. Leave empty to disable.",
+     "json_schema": "{\"type\":\"object\",\"properties\":{\"value\":{\"type\":\"string\"}}}",
+     "admin_form": {"fields": [{"key": "value", "label": "Listen address", "control": "ADMIN_FORM_CONTROL_TEXT"}]}}
   ]
 }
