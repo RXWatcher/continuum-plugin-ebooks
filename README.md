@@ -3,8 +3,9 @@
 Customer-facing ebook portal for Continuum. Browser-based reader (epub.js), OPDS catalog feed for third-party reader apps, KOReader kosync compatibility, send-to-Kobo (KEPUB conversion via kepubify), send-to-Kindle (SMTP), request flow, admin SPA.
 
 This plugin is the **portal**, not a source of ebooks. Pair it with one or more
-`ebook_backend.v1` providers such as `continuum.local-ebooks` for local files
-or `continuum.annas-archive-downloader` for Anna's Archive downloads.
+`ebook_backend.v1` providers such as `continuum.local-ebooks` for local files,
+`continuum.bookwarehouse-ebook` for a managed Calibre-backed library, and
+`continuum.annas-archive-downloader` for direct download requests.
 
 ## Capabilities
 
@@ -27,10 +28,23 @@ or `continuum.annas-archive-downloader` for Anna's Archive downloads.
 | `kepubify_path` | no | Path to the kepubify binary (default `/usr/local/bin/kepubify`). |
 | `kindle_smtp_config` | no | JSON: `{"host","port","username","password","from","tls"}` for send-to-Kindle. |
 | `opds_realm` | no | Basic-auth realm string for OPDS. |
-| `path_remappings` | no | Reserved for future use. |
+| `path_remappings` | no | Stored for deployment-specific direct-path mapping. |
 | `auto_approve_requests` | no | Skip the admin approval queue. |
-| `target_backend_plugin_id` | no | Plugin ID of the active `ebook_backend.v1` provider. |
+| `target_backend_plugin_id` | no | Default download provider plugin ID for new requests. Presentation libraries are configured separately in the admin UI. |
 | `standalone_http_listen` | no | Same model as the [`audiobooks`](../continuum-plugin-audiobooks/) plugin — bind a second TCP listener for client-app surfaces (KOReader, OPDS readers). |
+
+## Library Model
+
+Admins define user-facing presentation libraries in the Ebooks admin UI. Each
+library has a display name, media type (`book`, `comics`, `manga`, or
+`documents`), source backend plugin, optional backend sub-library, enabled
+state, and sort order. This lets one portal expose several library experiences
+at the same time, for example ebooks from Book Warehouse and comics from Local
+Ebooks.
+
+Download providers are separate from presentation libraries. A provider can be
+catalog-capable, download-capable, or both, depending on its `ebook_roles`
+metadata.
 
 ## Dependencies
 
@@ -64,7 +78,8 @@ chmod +x /usr/local/bin/kepubify
 
 ### 3. Configure via admin UI
 
-Configure `database_url` and `target_backend_plugin_id`, plus any optional feature switches you want enabled.
+Configure `database_url`, create presentation libraries, choose a default
+download provider, and set any optional feature switches you want enabled.
 
 ## Build & test
 
