@@ -142,7 +142,7 @@ func main() {
 			hostBase = "http://localhost:8080"
 		}
 		hostToken := os.Getenv("CONTINUUM_PLUGIN_TOKEN")
-		host := backend.NewHostHTTPClient(hostBase, hostToken)
+		host := backend.NewHostHTTPClient(hostBase, hostToken).WithRuntimeHost(sdkruntime.Host())
 
 		ev := event.New(sdkruntime.Host(), logger.Named("event"))
 

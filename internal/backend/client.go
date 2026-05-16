@@ -16,8 +16,12 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"strconv"
 	"strings"
 	"time"
+
+	"github.com/ContinuumApp/continuum-plugin-sdk/pkg/pluginsdk/runtimehost"
 )
 
 const defaultTimeout = 60 * time.Second
@@ -35,6 +39,7 @@ type HostHTTPClient struct {
 	hostBaseURL string // e.g. http://localhost:8090 (set from env or sensible default)
 	token       string // service token forwarded as bearer
 	hc          *http.Client
+	runtimeHost *runtimehost.Client
 }
 
 // NewHostHTTPClient constructs the proxy client. baseURL is the host's HTTP
@@ -45,6 +50,11 @@ func NewHostHTTPClient(baseURL, token string) *HostHTTPClient {
 		token:       token,
 		hc:          &http.Client{Timeout: defaultTimeout},
 	}
+}
+
+func (c *HostHTTPClient) WithRuntimeHost(host *runtimehost.Client) *HostHTTPClient {
+	c.runtimeHost = host
+	return c
 }
 
 func (c *HostHTTPClient) HostBaseURL() string { return c.hostBaseURL }
@@ -82,6 +92,26 @@ func (c *HostHTTPClient) PostJSON(ctx context.Context, installID, pluginPath str
 }
 
 func (c *HostHTTPClient) do(ctx context.Context, method, installID, pluginPath string, body []byte, headers map[string]string) ([]byte, int, error) {
+	if c.runtimeHost != nil {
+		if id, err := strconv.Atoi(installID); err == nil && id > 0 {
+			path, query := splitPluginPath(pluginPath)
+			resp, err := c.runtimeHost.CallPluginHTTP(ctx, runtimehost.CallPluginHTTPRequest{
+				InstallationID: id,
+				Method:         method,
+				Path:           path,
+				Headers:        headers,
+				Body:           body,
+				Query:          query,
+			})
+			if err != nil {
+				return nil, 0, err
+			}
+			if len(resp.Body) > maxResponseBytes {
+				return nil, resp.StatusCode, fmt.Errorf("response exceeds %d bytes", maxResponseBytes)
+			}
+			return resp.Body, resp.StatusCode, nil
+		}
+	}
 	url := fmt.Sprintf("%s/api/v1/plugins/%s%s", c.hostBaseURL, installID, pluginPath)
 	var bodyReader *strings.Reader
 	if body != nil {
@@ -114,4 +144,24 @@ func (c *HostHTTPClient) do(ctx context.Context, method, installID, pluginPath s
 		return nil, 0, fmt.Errorf("read body: %w", err)
 	}
 	return rb, resp.StatusCode, nil
+}
+
+func splitPluginPath(pathAndQuery string) (string, map[string]any) {
+	u, err := url.Parse(pathAndQuery)
+	if err != nil || u.RawQuery == "" {
+		return pathAndQuery, nil
+	}
+	query := make(map[string]any)
+	for key, values := range u.Query() {
+		if len(values) == 1 {
+			query[key] = values[0]
+			continue
+		}
+		items := make([]any, 0, len(values))
+		for _, value := range values {
+			items = append(items, value)
+		}
+		query[key] = items
+	}
+	return u.Path, query
 }
