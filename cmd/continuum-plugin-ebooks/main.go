@@ -128,6 +128,9 @@ func main() {
 		if cfg.TargetBackendPluginID != "" {
 			curCfg.TargetBackendPluginID = cfg.TargetBackendPluginID
 		}
+		if cfg.TargetBackendInstallID != "" {
+			curCfg.TargetBackendInstallID = cfg.TargetBackendInstallID
+		}
 		_ = st.UpsertConfig(ctx, curCfg)
 
 		// HostHTTPClient — the portal-→backend proxy URL is the local host

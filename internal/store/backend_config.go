@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -12,6 +13,7 @@ import (
 
 type Config struct {
 	TargetBackendPluginID    string
+	TargetBackendInstallID   string
 	AutoApproveRequests      bool
 	DefaultStreamingMode     string
 	CacheDir                 string
@@ -25,19 +27,51 @@ type Config struct {
 	UpdatedAt                time.Time
 }
 
+func (c Config) BackendInstallID() string {
+	if c.TargetBackendInstallID != "" {
+		return c.TargetBackendInstallID
+	}
+	if isNumericID(c.TargetBackendPluginID) {
+		return c.TargetBackendPluginID
+	}
+	return ""
+}
+
+func (c Config) BackendPluginID() string {
+	if isNumericID(c.TargetBackendPluginID) {
+		return ""
+	}
+	return c.TargetBackendPluginID
+}
+
+func isNumericID(value string) bool {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return false
+	}
+	for _, r := range value {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}
+
 // GetConfig returns the singleton backend_config row. If none exists, it
 // inserts a sensible default (with a fresh random kosync_secret) and returns
 // the new row.
 func (s *Store) GetConfig(ctx context.Context) (Config, error) {
 	row := s.pool.QueryRow(ctx, `
-		SELECT target_backend_plugin_id, auto_approve_requests, default_streaming_mode,
+		SELECT target_backend_plugin_id, target_backend_installation_id,
+		       auto_approve_requests, default_streaming_mode,
 		       COALESCE(cache_dir,''), cache_max_size_gb, cache_download_concurrency,
 		       path_remappings, kosync_secret, opds_realm, kindle_smtp_config,
 		       kepubify_path, updated_at
 		FROM backend_config WHERE id = 1
 	`)
 	var c Config
-	if err := row.Scan(&c.TargetBackendPluginID, &c.AutoApproveRequests, &c.DefaultStreamingMode,
+	if err := row.Scan(&c.TargetBackendPluginID, &c.TargetBackendInstallID,
+		&c.AutoApproveRequests, &c.DefaultStreamingMode,
 		&c.CacheDir, &c.CacheMaxSizeGB, &c.CacheDownloadConcurrency,
 		&c.PathRemappings, &c.KosyncSecret, &c.OpdsRealm, &c.KindleSMTPConfig,
 		&c.KepubifyPath, &c.UpdatedAt); err != nil {
@@ -84,12 +118,13 @@ func (s *Store) UpsertConfig(ctx context.Context, c Config) error {
 		c.KindleSMTPConfig = []byte("{}")
 	}
 	_, err := s.pool.Exec(ctx, `
-		INSERT INTO backend_config (id, target_backend_plugin_id, auto_approve_requests,
+		INSERT INTO backend_config (id, target_backend_plugin_id, target_backend_installation_id, auto_approve_requests,
 			default_streaming_mode, cache_dir, cache_max_size_gb, cache_download_concurrency,
 			path_remappings, kosync_secret, opds_realm, kindle_smtp_config, kepubify_path, updated_at)
-		VALUES (1, $1, $2, $3, NULLIF($4,''), $5, $6, $7, $8, $9, $10, $11, now())
+		VALUES (1, $1, $2, $3, $4, NULLIF($5,''), $6, $7, $8, $9, $10, $11, $12, now())
 		ON CONFLICT (id) DO UPDATE SET
 			target_backend_plugin_id   = EXCLUDED.target_backend_plugin_id,
+			target_backend_installation_id = EXCLUDED.target_backend_installation_id,
 			auto_approve_requests      = EXCLUDED.auto_approve_requests,
 			default_streaming_mode     = EXCLUDED.default_streaming_mode,
 			cache_dir                  = EXCLUDED.cache_dir,
@@ -101,7 +136,7 @@ func (s *Store) UpsertConfig(ctx context.Context, c Config) error {
 			kindle_smtp_config         = EXCLUDED.kindle_smtp_config,
 			kepubify_path              = EXCLUDED.kepubify_path,
 			updated_at                 = now()
-	`, c.TargetBackendPluginID, c.AutoApproveRequests, c.DefaultStreamingMode,
+	`, c.TargetBackendPluginID, c.TargetBackendInstallID, c.AutoApproveRequests, c.DefaultStreamingMode,
 		c.CacheDir, c.CacheMaxSizeGB, c.CacheDownloadConcurrency,
 		c.PathRemappings, c.KosyncSecret, c.OpdsRealm, c.KindleSMTPConfig, c.KepubifyPath)
 	if err != nil {

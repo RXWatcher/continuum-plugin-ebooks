@@ -25,6 +25,7 @@ type Config struct {
 	PathRemappings           json.RawMessage
 	AutoApproveRequests      bool
 	TargetBackendPluginID    string
+	TargetBackendInstallID   string
 	StandaloneHTTPListen     string
 }
 
@@ -101,6 +102,8 @@ func (s *Server) Configure(_ context.Context, req *pluginv1.ConfigureRequest) (*
 			}
 		case "target_backend_plugin_id":
 			cfg.TargetBackendPluginID = stringFrom(val)
+		case "target_backend_installation_id":
+			cfg.TargetBackendInstallID = stringFrom(val)
 		case "standalone_http_listen":
 			cfg.StandaloneHTTPListen = stringFrom(val)
 		}

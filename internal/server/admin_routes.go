@@ -211,6 +211,7 @@ func (s *Server) handleAdminGetBackend(w http.ResponseWriter, r *http.Request) {
 	libs, _ := s.deps.Store.ListPortalLibraries(r.Context(), false)
 	writeJSON(w, 200, map[string]any{
 		"target_backend_plugin_id":   cfg.TargetBackendPluginID,
+		"target_backend_installation_id": cfg.TargetBackendInstallID,
 		"auto_approve_requests":      cfg.AutoApproveRequests,
 		"default_streaming_mode":     cfg.DefaultStreamingMode,
 		"cache_dir":                  cfg.CacheDir,
@@ -225,6 +226,7 @@ func (s *Server) handleAdminGetBackend(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleAdminPatchBackend(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		TargetBackendPluginID    *string `json:"target_backend_plugin_id"`
+		TargetBackendInstallID   *string `json:"target_backend_installation_id"`
 		AutoApproveRequests      *bool   `json:"auto_approve_requests"`
 		DefaultStreamingMode     *string `json:"default_streaming_mode"`
 		CacheMaxSizeGB           *int    `json:"cache_max_size_gb"`
@@ -239,6 +241,9 @@ func (s *Server) handleAdminPatchBackend(w http.ResponseWriter, r *http.Request)
 	cur, _ := s.deps.Store.GetConfig(r.Context())
 	if body.TargetBackendPluginID != nil {
 		cur.TargetBackendPluginID = *body.TargetBackendPluginID
+	}
+	if body.TargetBackendInstallID != nil {
+		cur.TargetBackendInstallID = *body.TargetBackendInstallID
 	}
 	if body.AutoApproveRequests != nil {
 		cur.AutoApproveRequests = *body.AutoApproveRequests
