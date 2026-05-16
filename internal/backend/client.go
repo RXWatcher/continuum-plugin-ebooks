@@ -13,6 +13,7 @@ package backend
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -62,6 +63,48 @@ func (c *HostHTTPClient) HostBaseURL() string { return c.hostBaseURL }
 // Get calls GET on the plugin-proxy path for installID.
 func (c *HostHTTPClient) Get(ctx context.Context, installID, pluginPath string) ([]byte, int, error) {
 	return c.do(ctx, http.MethodGet, installID, pluginPath, nil, nil)
+}
+
+// GetJSON issues a GET against the plugin-proxy path and decodes JSON into
+// out. When RuntimeHost is connected this uses the SDK JSON helper; otherwise
+// it falls back to the host HTTP proxy.
+func (c *HostHTTPClient) GetJSON(ctx context.Context, installID, pluginPath string, out any) (int, error) {
+	if c.runtimeHost != nil {
+		if id, err := strconv.Atoi(installID); err == nil && id > 0 {
+			path, query := splitPluginPath(pluginPath)
+			headers := map[string]string{}
+			if c.token != "" {
+				headers["Authorization"] = "Bearer " + c.token
+			}
+			err := c.runtimeHost.CallPluginJSON(ctx, runtimehost.CallPluginJSONRequest{
+				InstallationID:   id,
+				Path:             path,
+				Headers:          headers,
+				Query:            query,
+				Response:         out,
+				MaxResponseBytes: maxResponseBytes,
+			})
+			var statusErr *runtimehost.HTTPStatusError
+			if errors.As(err, &statusErr) {
+				return statusErr.StatusCode, fmt.Errorf("upstream %d: %s", statusErr.StatusCode, string(statusErr.Body))
+			}
+			if err != nil {
+				return 0, err
+			}
+			return http.StatusOK, nil
+		}
+	}
+	body, code, err := c.Get(ctx, installID, pluginPath)
+	if err != nil {
+		return 0, err
+	}
+	if code < 200 || code >= 300 {
+		return code, fmt.Errorf("upstream %d: %s", code, string(body))
+	}
+	if err := json.Unmarshal(body, out); err != nil {
+		return code, fmt.Errorf("decode: %w", err)
+	}
+	return code, nil
 }
 
 // GetStream returns the response body without buffering (for file streaming).

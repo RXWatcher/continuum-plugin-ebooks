@@ -2,7 +2,6 @@ package backend
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/url"
 )
@@ -79,16 +78,9 @@ func NewEbookBackend(host *HostHTTPClient, installID string) *EbookBackend {
 }
 
 func (b *EbookBackend) GetCapabilities(ctx context.Context) (Capabilities, error) {
-	body, code, err := b.host.Get(ctx, b.installID, "/api/v1/capabilities")
-	if err != nil {
-		return Capabilities{}, err
-	}
-	if code != 200 {
-		return Capabilities{}, fmt.Errorf("backend /capabilities returned %d: %s", code, string(body))
-	}
 	var c Capabilities
-	if err := json.Unmarshal(body, &c); err != nil {
-		return Capabilities{}, fmt.Errorf("decode: %w", err)
+	if _, err := b.host.GetJSON(ctx, b.installID, "/api/v1/capabilities", &c); err != nil {
+		return Capabilities{}, err
 	}
 	return c, nil
 }
@@ -137,33 +129,19 @@ func (b *EbookBackend) ListCatalog(ctx context.Context, p CatalogQuery) (PageEnv
 	if p.Tag != "" {
 		q.Set("tag", p.Tag)
 	}
-	body, code, err := b.host.Get(ctx, b.installID, "/api/v1/catalog?"+q.Encode())
-	if err != nil {
-		return PageEnvelope[EbookSummary]{}, err
-	}
-	if code != 200 {
-		return PageEnvelope[EbookSummary]{}, fmt.Errorf("upstream %d: %s", code, string(body))
-	}
 	var env PageEnvelope[EbookSummary]
-	if err := json.Unmarshal(body, &env); err != nil {
-		return PageEnvelope[EbookSummary]{}, fmt.Errorf("decode: %w", err)
+	if _, err := b.host.GetJSON(ctx, b.installID, "/api/v1/catalog?"+q.Encode(), &env); err != nil {
+		return PageEnvelope[EbookSummary]{}, err
 	}
 	return env, nil
 }
 
 func (b *EbookBackend) ListLibraries(ctx context.Context) ([]LibraryInfo, error) {
-	body, code, err := b.host.Get(ctx, b.installID, "/api/v1/catalog/libraries")
-	if err != nil {
-		return nil, err
-	}
-	if code != 200 {
-		return nil, fmt.Errorf("upstream %d: %s", code, string(body))
-	}
 	var env struct {
 		Items []LibraryInfo `json:"items"`
 	}
-	if err := json.Unmarshal(body, &env); err != nil {
-		return nil, fmt.Errorf("decode: %w", err)
+	if _, err := b.host.GetJSON(ctx, b.installID, "/api/v1/catalog/libraries", &env); err != nil {
+		return nil, err
 	}
 	return env.Items, nil
 }
@@ -171,31 +149,17 @@ func (b *EbookBackend) ListLibraries(ctx context.Context) ([]LibraryInfo, error)
 func (b *EbookBackend) Search(ctx context.Context, query string) (PageEnvelope[EbookSummary], error) {
 	q := url.Values{}
 	q.Set("q", query)
-	body, code, err := b.host.Get(ctx, b.installID, "/api/v1/catalog/search?"+q.Encode())
-	if err != nil {
-		return PageEnvelope[EbookSummary]{}, err
-	}
-	if code != 200 {
-		return PageEnvelope[EbookSummary]{}, fmt.Errorf("upstream %d: %s", code, string(body))
-	}
 	var env PageEnvelope[EbookSummary]
-	if err := json.Unmarshal(body, &env); err != nil {
-		return PageEnvelope[EbookSummary]{}, fmt.Errorf("decode: %w", err)
+	if _, err := b.host.GetJSON(ctx, b.installID, "/api/v1/catalog/search?"+q.Encode(), &env); err != nil {
+		return PageEnvelope[EbookSummary]{}, err
 	}
 	return env, nil
 }
 
 func (b *EbookBackend) GetBook(ctx context.Context, bookID string) (EbookDetail, error) {
-	body, code, err := b.host.Get(ctx, b.installID, "/api/v1/catalog/"+url.PathEscape(bookID))
-	if err != nil {
-		return EbookDetail{}, err
-	}
-	if code != 200 {
-		return EbookDetail{}, fmt.Errorf("upstream %d: %s", code, string(body))
-	}
 	var d EbookDetail
-	if err := json.Unmarshal(body, &d); err != nil {
-		return EbookDetail{}, fmt.Errorf("decode: %w", err)
+	if _, err := b.host.GetJSON(ctx, b.installID, "/api/v1/catalog/"+url.PathEscape(bookID), &d); err != nil {
+		return EbookDetail{}, err
 	}
 	return d, nil
 }
@@ -250,22 +214,16 @@ func (b *EbookBackend) browseFacet(ctx context.Context, kind, cursor string, lim
 	if libraryID > 0 {
 		q.Set("library_id", fmt.Sprintf("%d", libraryID))
 	}
-	body, code, err := b.host.Get(ctx, b.installID, "/api/v1/browse/"+kind+"?"+q.Encode())
-	if err != nil {
-		return PageEnvelope[FacetItem]{}, err
-	}
+	var env PageEnvelope[FacetItem]
+	code, err := b.host.GetJSON(ctx, b.installID, "/api/v1/browse/"+kind+"?"+q.Encode(), &env)
 	// ebookdb intentionally has no browse endpoints — treat 404 as "no facets
 	// available" rather than a hard error so the portal can render an empty
 	// state.
 	if code == 404 {
 		return PageEnvelope[FacetItem]{Items: []FacetItem{}}, nil
 	}
-	if code != 200 {
-		return PageEnvelope[FacetItem]{}, fmt.Errorf("upstream %d: %s", code, string(body))
-	}
-	var env PageEnvelope[FacetItem]
-	if err := json.Unmarshal(body, &env); err != nil {
-		return PageEnvelope[FacetItem]{}, fmt.Errorf("decode: %w", err)
+	if err != nil {
+		return PageEnvelope[FacetItem]{}, err
 	}
 	return env, nil
 }
@@ -277,16 +235,9 @@ type RequestSnapshot struct {
 }
 
 func (b *EbookBackend) GetRequestSnapshot(ctx context.Context, externalID string) (RequestSnapshot, error) {
-	body, code, err := b.host.Get(ctx, b.installID, "/api/v1/requests/"+url.PathEscape(externalID))
-	if err != nil {
-		return RequestSnapshot{}, err
-	}
-	if code != 200 {
-		return RequestSnapshot{}, fmt.Errorf("upstream %d: %s", code, string(body))
-	}
 	var snap RequestSnapshot
-	if err := json.Unmarshal(body, &snap); err != nil {
-		return RequestSnapshot{}, fmt.Errorf("decode: %w", err)
+	if _, err := b.host.GetJSON(ctx, b.installID, "/api/v1/requests/"+url.PathEscape(externalID), &snap); err != nil {
+		return RequestSnapshot{}, err
 	}
 	return snap, nil
 }
