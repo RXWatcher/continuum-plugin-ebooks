@@ -632,15 +632,17 @@ func (s *Server) handleCreateRequest(w http.ResponseWriter, r *http.Request) {
 		_ = s.deps.Store.UpdateRequestStatus(r.Context(), reqRow.ID, "submitted", "", "", "", "")
 		if s.deps.Ev != nil {
 			s.deps.Ev.Publish(r.Context(), "request_submitted", map[string]any{
-				"request_id":       reqRow.ID,
-				"target_plugin_id": reqRow.TargetPluginID,
-				"title":            reqRow.Title,
-				"authors":          reqRow.Authors,
-				"isbn":             reqRow.ISBN,
-				"source_id":        reqRow.SourceID,
-				"format_pref":      reqRow.FormatPref,
-				"media_type":       reqRow.MediaType,
-				"auto_monitor":     reqRow.AutoMonitor,
+				"request_id":                reqRow.ID,
+				"requestId":                 reqRow.ID,
+				"target_plugin_id":          reqRow.TargetPluginID,
+				"target_provider_plugin_id": reqRow.TargetPluginID,
+				"title":                     reqRow.Title,
+				"authors":                   reqRow.Authors,
+				"isbn":                      reqRow.ISBN,
+				"source_id":                 reqRow.SourceID,
+				"format_pref":               reqRow.FormatPref,
+				"media_type":                reqRow.MediaType,
+				"auto_monitor":              reqRow.AutoMonitor,
 			})
 		}
 	}

@@ -15,7 +15,11 @@
         "plugin.continuum.annas-archive-downloader.request_acknowledged",
         "plugin.continuum.annas-archive-downloader.request_failed",
         "plugin.continuum.annas-archive-downloader.request_status_changed",
-        "plugin.continuum.annas-archive-downloader.request_fulfilled"
+        "plugin.continuum.annas-archive-downloader.request_fulfilled",
+        "plugin.continuum.bookwarehouse-ebook.request_acknowledged",
+        "plugin.continuum.bookwarehouse-ebook.request_failed",
+        "plugin.continuum.bookwarehouse-ebook.request_status_changed",
+        "plugin.continuum.bookwarehouse-ebook.request_fulfilled"
       ]
     },
     {"type": "scheduled_task.v1", "id": "request_reconciler",
@@ -80,6 +84,10 @@
      "description": "Plugin install id of the request/download provider to use by default.",
      "json_schema": "{\"type\":\"object\",\"properties\":{\"value\":{\"type\":\"string\"}}}",
      "admin_form": {"fields": [{"key": "value", "label": "Plugin ID", "control": "ADMIN_FORM_CONTROL_TEXT"}]}},
+    {"key": "target_backend_installation_id", "title": "Default download provider installation",
+     "description": "Optional installed instance ID for the default provider. When empty, the provider plugin ID is used.",
+     "json_schema": "{\"type\":\"object\",\"properties\":{\"value\":{\"type\":\"string\"}}}",
+     "admin_form": {"fields": [{"key": "value", "label": "Installation ID", "control": "ADMIN_FORM_CONTROL_TEXT"}]}},
     {"key": "standalone_http_listen", "title": "Standalone HTTP listen address",
      "description": "Optional. When set (e.g. ':7878' or '127.0.0.1:7878'), the plugin serves its HTTP routes directly on this address so operators can reverse-proxy a hostname (e.g. ebooks.example.com) to it. Public client-app routes (OPDS, kosync, Kobo, Kindle inbound) work normally there; protected SPA routes 401 (no Continuum session). Changing this requires a plugin restart. Leave empty to disable.",
      "json_schema": "{\"type\":\"object\",\"properties\":{\"value\":{\"type\":\"string\"}}}",

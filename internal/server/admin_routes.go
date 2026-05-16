@@ -119,15 +119,17 @@ func (s *Server) submitRequest(ctx context.Context, cur store.Request) {
 	_ = s.deps.Store.UpdateRequestStatus(ctx, cur.ID, "submitted", "", "", "", "")
 	if s.deps.Ev != nil {
 		s.deps.Ev.Publish(ctx, "request_submitted", map[string]any{
-			"request_id":       cur.ID,
-			"target_plugin_id": cur.TargetPluginID,
-			"title":            cur.Title,
-			"authors":          cur.Authors,
-			"isbn":             cur.ISBN,
-			"source_id":        cur.SourceID,
-			"format_pref":      cur.FormatPref,
-			"media_type":       cur.MediaType,
-			"auto_monitor":     cur.AutoMonitor,
+			"request_id":                cur.ID,
+			"requestId":                 cur.ID,
+			"target_plugin_id":          cur.TargetPluginID,
+			"target_provider_plugin_id": cur.TargetPluginID,
+			"title":                     cur.Title,
+			"authors":                   cur.Authors,
+			"isbn":                      cur.ISBN,
+			"source_id":                 cur.SourceID,
+			"format_pref":               cur.FormatPref,
+			"media_type":                cur.MediaType,
+			"auto_monitor":              cur.AutoMonitor,
 		})
 	}
 }
@@ -210,16 +212,16 @@ func (s *Server) handleAdminGetBackend(w http.ResponseWriter, r *http.Request) {
 	cfg, _ := s.deps.Store.GetConfig(r.Context())
 	libs, _ := s.deps.Store.ListPortalLibraries(r.Context(), false)
 	writeJSON(w, 200, map[string]any{
-		"target_backend_plugin_id":   cfg.TargetBackendPluginID,
+		"target_backend_plugin_id":       cfg.TargetBackendPluginID,
 		"target_backend_installation_id": cfg.TargetBackendInstallID,
-		"auto_approve_requests":      cfg.AutoApproveRequests,
-		"default_streaming_mode":     cfg.DefaultStreamingMode,
-		"cache_dir":                  cfg.CacheDir,
-		"cache_max_size_gb":          cfg.CacheMaxSizeGB,
-		"cache_download_concurrency": cfg.CacheDownloadConcurrency,
-		"opds_realm":                 cfg.OpdsRealm,
-		"kepubify_path":              cfg.KepubifyPath,
-		"libraries":                  libs,
+		"auto_approve_requests":          cfg.AutoApproveRequests,
+		"default_streaming_mode":         cfg.DefaultStreamingMode,
+		"cache_dir":                      cfg.CacheDir,
+		"cache_max_size_gb":              cfg.CacheMaxSizeGB,
+		"cache_download_concurrency":     cfg.CacheDownloadConcurrency,
+		"opds_realm":                     cfg.OpdsRealm,
+		"kepubify_path":                  cfg.KepubifyPath,
+		"libraries":                      libs,
 	})
 }
 

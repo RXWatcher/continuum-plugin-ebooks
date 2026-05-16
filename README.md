@@ -31,6 +31,7 @@ This plugin is the **portal**, not a source of ebooks. Pair it with one or more
 | `path_remappings` | no | Stored for deployment-specific direct-path mapping. |
 | `auto_approve_requests` | no | Skip the admin approval queue. |
 | `target_backend_plugin_id` | no | Default download provider plugin ID for new requests. Presentation libraries are configured separately in the admin UI. |
+| `target_backend_installation_id` | no | Optional installed instance ID for the default download provider. If empty, the provider plugin ID is used. |
 | `standalone_http_listen` | no | Same model as the [`audiobooks`](../continuum-plugin-audiobooks/) plugin — bind a second TCP listener for client-app surfaces (KOReader, OPDS readers). |
 
 ## Library Model
@@ -46,13 +47,20 @@ Download providers are separate from presentation libraries. A provider can be
 catalog-capable, download-capable, or both, depending on its `ebook_roles`
 metadata.
 
+Provider plugins are optional peers, not startup dependencies. If the selected
+download provider is missing or unavailable, the portal still starts and the
+admin/user flows report the provider problem when a request or provider health
+check needs it. Backend status events are consumed opportunistically, and the
+request reconciler handles missed events.
+
 ## Dependencies
 
 - Postgres role + `ebooks` schema.
 - A writable cache directory if disk-cache streaming is enabled.
 - `kepubify` binary on PATH for send-to-Kobo.
 - SMTP credentials for send-to-Kindle.
-- One or more `ebook_backend.v1` provider plugins.
+- One or more `ebook_backend.v1` provider plugins for catalog/search/download
+  behavior. The portal can be installed before providers are added.
 
 ## Install
 

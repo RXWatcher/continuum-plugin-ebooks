@@ -29,7 +29,7 @@ func (h *Handler) HandleEvent(ctx context.Context, req *pluginv1.HandleEventRequ
 		return &pluginv1.HandleEventResponse{}, nil
 	}
 	p := req.GetPayload().AsMap()
-	requestID, _ := p["request_id"].(string)
+	requestID := requestIDFromPayload(p)
 	if requestID == "" {
 		return &pluginv1.HandleEventResponse{}, nil
 	}
@@ -62,4 +62,12 @@ func (h *Handler) HandleEvent(ctx context.Context, req *pluginv1.HandleEventRequ
 		_ = d.Store.UpdateRequestStatus(ctx, requestID, "failed", externalID, "", reason, "")
 	}
 	return &pluginv1.HandleEventResponse{}, nil
+}
+
+func requestIDFromPayload(p map[string]any) string {
+	if id, _ := p["request_id"].(string); id != "" {
+		return id
+	}
+	id, _ := p["requestId"].(string)
+	return id
 }
