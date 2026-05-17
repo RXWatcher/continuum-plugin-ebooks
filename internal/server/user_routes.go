@@ -75,6 +75,17 @@ func writeJSON(w http.ResponseWriter, code int, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
+func nonNilSlice[T any](items []T) []T {
+	if items == nil {
+		return []T{}
+	}
+	return items
+}
+
+func writeItems[T any](w http.ResponseWriter, code int, items []T) {
+	writeJSON(w, code, map[string]any{"items": nonNilSlice(items)})
+}
+
 func writeErr(w http.ResponseWriter, code int, msg string) {
 	writeJSON(w, code, map[string]any{"error": map[string]any{"message": msg}})
 }
@@ -141,7 +152,7 @@ func (s *Server) handleLibrary(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 500, err.Error())
 		return
 	}
-	writeJSON(w, 200, map[string]any{"items": rows})
+	writeItems(w, 200, rows)
 }
 
 func (s *Server) handleRecentProgress(w http.ResponseWriter, r *http.Request) {
@@ -151,7 +162,7 @@ func (s *Server) handleRecentProgress(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 500, err.Error())
 		return
 	}
-	writeJSON(w, 200, map[string]any{"items": rows})
+	writeItems(w, 200, rows)
 }
 
 func (s *Server) handleGetBookUserData(w http.ResponseWriter, r *http.Request) {
@@ -510,7 +521,7 @@ func (s *Server) handleListLibraries(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 500, err.Error())
 		return
 	}
-	writeJSON(w, 200, map[string]any{"items": items})
+	writeItems(w, 200, items)
 }
 
 func (s *Server) handleBrowseAuthors(w http.ResponseWriter, r *http.Request) {
@@ -777,7 +788,7 @@ func (s *Server) handleListCollectionItems(w http.ResponseWriter, r *http.Reques
 		writeErr(w, 500, err.Error())
 		return
 	}
-	writeJSON(w, 200, map[string]any{"items": items})
+	writeItems(w, 200, items)
 }
 
 func (s *Server) handleAddCollectionItem(w http.ResponseWriter, r *http.Request) {

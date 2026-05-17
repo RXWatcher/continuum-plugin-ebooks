@@ -53,7 +53,7 @@ func (s *Server) handleAdminListRequests(w http.ResponseWriter, r *http.Request)
 			return
 		}
 	}
-	writeJSON(w, 200, map[string]any{"items": rows})
+	writeItems(w, 200, rows)
 }
 
 func (s *Server) handleAdminProviderTestSearch(w http.ResponseWriter, r *http.Request) {
@@ -79,7 +79,7 @@ func (s *Server) handleAdminProviderTestSearch(w http.ResponseWriter, r *http.Re
 	writeJSON(w, 200, map[string]any{
 		"ok":      true,
 		"message": "Search completed",
-		"items":   env.Items,
+		"items":   nonNilSlice(env.Items),
 	})
 }
 
@@ -190,7 +190,7 @@ func (s *Server) handleAdminListRoutingRules(w http.ResponseWriter, r *http.Requ
 		writeErr(w, 500, err.Error())
 		return
 	}
-	writeJSON(w, 200, map[string]any{"items": rules})
+	writeItems(w, 200, rules)
 }
 
 func (s *Server) handleAdminReplaceRoutingRules(w http.ResponseWriter, r *http.Request) {
@@ -278,7 +278,7 @@ func (s *Server) handleAdminListLibraries(w http.ResponseWriter, r *http.Request
 		writeErr(w, 500, err.Error())
 		return
 	}
-	writeJSON(w, 200, map[string]any{"items": libs})
+	writeItems(w, 200, libs)
 }
 
 func (s *Server) handleAdminReplaceLibraries(w http.ResponseWriter, r *http.Request) {
@@ -307,7 +307,7 @@ func (s *Server) handleAdminBackendLibraries(w http.ResponseWriter, r *http.Requ
 		writeJSON(w, 200, map[string]any{"items": []backend.LibraryInfo{}})
 		return
 	}
-	writeJSON(w, 200, map[string]any{"items": items})
+	writeItems(w, 200, items)
 }
 
 func (s *Server) handleAdminCacheStats(w http.ResponseWriter, r *http.Request) {
@@ -321,17 +321,17 @@ func (s *Server) handleAdminCacheStats(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleAdminCacheLargest(w http.ResponseWriter, r *http.Request) {
 	rows, _ := s.deps.Store.ListCacheLargest(r.Context(), 50)
-	writeJSON(w, 200, map[string]any{"items": rows})
+	writeItems(w, 200, rows)
 }
 
 func (s *Server) handleAdminKoboSessions(w http.ResponseWriter, r *http.Request) {
 	rows, _ := s.deps.Store.ListAllKoboSessions(r.Context(), 100)
-	writeJSON(w, 200, map[string]any{"items": rows})
+	writeItems(w, 200, rows)
 }
 
 func (s *Server) handleAdminOPDSTokens(w http.ResponseWriter, r *http.Request) {
 	rows, _ := s.deps.Store.ListAllOPDSTokens(r.Context())
-	writeJSON(w, 200, map[string]any{"items": rows})
+	writeItems(w, 200, rows)
 }
 
 func (s *Server) handleAdminRevokeOPDSToken(w http.ResponseWriter, r *http.Request) {
@@ -345,7 +345,7 @@ func (s *Server) handleAdminRevokeOPDSToken(w http.ResponseWriter, r *http.Reque
 
 func (s *Server) handleAdminKosyncUsers(w http.ResponseWriter, r *http.Request) {
 	rows, _ := s.deps.Store.ListKosyncUsers(r.Context())
-	writeJSON(w, 200, map[string]any{"items": rows})
+	writeItems(w, 200, rows)
 }
 
 func (s *Server) handleAdminDeleteKosync(w http.ResponseWriter, r *http.Request) {
@@ -359,5 +359,5 @@ func (s *Server) handleAdminDeleteKosync(w http.ResponseWriter, r *http.Request)
 
 func (s *Server) handleAdminKindleLog(w http.ResponseWriter, r *http.Request) {
 	rows, _ := s.deps.Store.ListAllKindleSends(r.Context(), 200)
-	writeJSON(w, 200, map[string]any{"items": rows})
+	writeItems(w, 200, rows)
 }

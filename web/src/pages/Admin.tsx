@@ -183,7 +183,7 @@ export default function Admin() {
           icon={<LibraryBig className="size-4" />}
           label="Enabled libraries"
           value={String(activeLibraries)}
-          detail={`${libraries.data?.items.length ?? 0} presentation routes configured`}
+          detail={`${(libraries.data?.items ?? []).length} presentation routes configured`}
         />
         <MetricCard
           icon={<Database className="size-4" />}
@@ -195,7 +195,7 @@ export default function Admin() {
           icon={<Send className="size-4" />}
           label="Pending requests"
           value={String(pendingRequests)}
-          detail={`${requests.data?.items.length ?? 0} active queue items`}
+          detail={`${(requests.data?.items ?? []).length} active queue items`}
         />
         <MetricCard
           icon={<HardDrive className="size-4" />}
@@ -581,7 +581,7 @@ function LibraryEditorRow({
             disabled={!backendID}
           >
             <option value="">All source items</option>
-            {backendLibraries.data?.items.map((lib) => (
+            {(backendLibraries.data?.items ?? []).map((lib) => (
               <option key={lib.id} value={lib.id}>
                 {lib.name}
                 {lib.media_type ? ` (${lib.media_type})` : ""}
@@ -1445,9 +1445,9 @@ function ProvidersTab({
                           <div className="font-medium">
                             {testSearch.data.message}
                           </div>
-                          {testSearch.data.items.length > 0 && (
+                          {(testSearch.data.items ?? []).length > 0 && (
                             <div className="mt-2 space-y-1">
-                              {testSearch.data.items.map((item) => (
+                              {(testSearch.data.items ?? []).map((item) => (
                                 <div
                                   key={item.id}
                                   className="truncate text-xs text-muted-foreground"
@@ -1737,6 +1737,7 @@ function CacheTab() {
   const used = cache.data?.bytes_used ?? 0;
   const max = cache.data?.bytes_max ?? 0;
   const pct = max ? (used / max) * 100 : 0;
+  const largestCacheEntries = largest.data?.items ?? [];
 
   return (
     <div className="space-y-4">
@@ -1805,7 +1806,7 @@ function CacheTab() {
         <CardContent>
           {largest.isLoading ? (
             <Skeleton className="h-56 w-full" />
-          ) : !largest.data?.items.length ? (
+          ) : largestCacheEntries.length === 0 ? (
             <EmptyState
               icon={<HardDrive className="size-7" />}
               title="No cached files"
@@ -1823,7 +1824,7 @@ function CacheTab() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {largest.data.items.map((entry) => (
+                {largestCacheEntries.map((entry) => (
                   <TableRow key={text(entry, "id", "ID")}>
                     <TableCell className="max-w-sm truncate">
                       {text(entry, "book_id", "BookID")}
@@ -1896,11 +1897,11 @@ function IntegrationsTab() {
               (token) => !text(token, "revoked_at", "RevokedAt"),
             ).length,
           )}
-          detail={`${opds.data?.items.length ?? 0} total issued`}
+          detail={`${(opds.data?.items ?? []).length} total issued`}
         />
         <StatusPanel
           title="KOReader users"
-          value={String(kosync.data?.items.length ?? 0)}
+          value={String((kosync.data?.items ?? []).length)}
           detail="Registered sync identities"
         />
         <StatusPanel
@@ -1910,7 +1911,7 @@ function IntegrationsTab() {
               (session) => text(session, "status", "Status") === "active",
             ).length,
           )}
-          detail={`${kobo.data?.items.length ?? 0} recent transfers`}
+          detail={`${(kobo.data?.items ?? []).length} recent transfers`}
         />
       </div>
 
