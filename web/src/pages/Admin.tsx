@@ -42,6 +42,7 @@ import {
   adminProviderTestSearch,
   adminReplaceLibraries,
   adminReplaceRoutingRules,
+  adminSyncLibraries,
   adminRevokeOPDSToken,
   fetchDownloadProviders,
   fetchInstalledBackends,
@@ -345,6 +346,20 @@ function LibrariesTab({
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const [syncBackend, setSyncBackend] = useState<string>(
+    backends[0] ? String(backends[0].id) : "",
+  );
+  const sync = useMutation({
+    mutationFn: () => adminSyncLibraries(syncBackend),
+    onSuccess: (r: { created: number; updated: number; pruned: number; kept: number }) => {
+      toast.success(
+        `Synced: ${r.created} created, ${r.updated} updated, ${r.pruned} pruned`,
+      );
+      qc.invalidateQueries({ queryKey: ["admin", "libraries"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   const addLibrary = () =>
     setDraft((items) => [
       ...items,
@@ -426,6 +441,26 @@ function LibrariesTab({
               </CardDescription>
             </div>
             <div className="flex gap-2">
+              <select
+                className="h-9 rounded-md border border-border bg-background px-2 text-sm"
+                value={syncBackend}
+                onChange={(e) => setSyncBackend(e.target.value)}
+                aria-label="Backend to sync from"
+              >
+                {backends.map((b) => (
+                  <option key={b.id} value={String(b.id)}>
+                    {b.display_name} ({b.plugin_id})
+                  </option>
+                ))}
+              </select>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => sync.mutate()}
+                disabled={sync.isPending || !syncBackend}
+              >
+                Sync from backend
+              </Button>
               <Button type="button" variant="outline" onClick={addLibrary}>
                 Add library
               </Button>
