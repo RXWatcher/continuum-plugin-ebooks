@@ -524,6 +524,11 @@ export const adminListBackendLibraries = (backendPluginID: string) =>
     `/api/v1/admin/backend-libraries?backend_plugin_id=${encodeURIComponent(backendPluginID)}`,
   );
 
+export const adminSyncLibraries = (backendPluginID: string) =>
+  api.post<{ created: number; updated: number; pruned: number; kept: number }>(
+    `/api/v1/admin/libraries/sync?backend_plugin_id=${encodeURIComponent(backendPluginID)}`,
+  );
+
 export const adminCacheStats = () =>
   api.get<{ bytes_used: number; bytes_max: number }>(`/api/v1/admin/cache`);
 
