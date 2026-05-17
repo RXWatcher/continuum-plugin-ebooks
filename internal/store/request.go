@@ -122,7 +122,7 @@ func (s *Store) ListNonTerminal(ctx context.Context, limit int) ([]Request, erro
 		       auto_monitor, COALESCE(denied_reason,''), COALESCE(failure_reason,''),
 		       COALESCE(fulfilled_book_id,''), created_at, updated_at, fulfilled_at
 		FROM request WHERE status NOT IN ('fulfilled','failed','denied','cancelled')
-		ORDER BY updated_at ASC LIMIT $1
+		ORDER BY updated_at ASC, id ASC LIMIT $1
 	`, limit)
 }
 

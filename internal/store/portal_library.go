@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
@@ -51,7 +52,7 @@ func (s *Store) GetPortalLibrary(ctx context.Context, id int64) (PortalLibrary, 
 		FROM portal_library
 		WHERE id = $1 AND enabled = TRUE
 	`, id).Scan(&l.ID, &l.Name, &l.MediaType, &l.BackendPluginID, &l.BackendLibraryID, &l.Enabled, &l.SortOrder)
-	if err == pgx.ErrNoRows {
+	if errors.Is(err, pgx.ErrNoRows) {
 		return PortalLibrary{}, ErrNotFound
 	}
 	return l, err
@@ -66,7 +67,7 @@ func (s *Store) DefaultPortalLibrary(ctx context.Context) (PortalLibrary, error)
 		ORDER BY sort_order ASC, id ASC
 		LIMIT 1
 	`).Scan(&l.ID, &l.Name, &l.MediaType, &l.BackendPluginID, &l.BackendLibraryID, &l.Enabled, &l.SortOrder)
-	if err == pgx.ErrNoRows {
+	if errors.Is(err, pgx.ErrNoRows) {
 		return PortalLibrary{}, ErrNotFound
 	}
 	return l, err

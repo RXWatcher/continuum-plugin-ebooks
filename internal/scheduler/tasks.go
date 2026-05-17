@@ -93,7 +93,12 @@ func (t *Tasks) RequestReconciler(ctx context.Context) error {
 		if snap.Status == "" || snap.Status == r.Status {
 			continue
 		}
-		_ = t.Store.UpdateRequestStatus(ctx, r.ID, snap.Status, r.ExternalID, "", "", "")
+		// AdvanceRequestStatus (not UpdateRequestStatus) so a backend
+		// snapshot polled here can't resurrect a request that a
+		// request_fulfilled/denied consumer event terminalised in the race
+		// window between ListNonTerminal and this write — it is
+		// terminal-guarded and a no-op on an already-terminal row.
+		_ = t.Store.AdvanceRequestStatus(ctx, r.ID, snap.Status, r.ExternalID, "", "")
 	}
 	return nil
 }
