@@ -370,6 +370,10 @@ func (s *Server) handleAdminSyncLibraries(w http.ResponseWriter, r *http.Request
 		writeErr(w, 400, "backend_plugin_id required")
 		return
 	}
+	// backendID is the installation-id string (same form the frontend select
+	// sends and cfg.BackendTarget() returns for the scheduled task), used by
+	// libsync.Reconcile as the BackendPluginID discriminant. Consistent with
+	// handleAdminBackendLibraries' use of the same query param.
 	stats, err := libsync.Sync(r.Context(), s.deps.Store,
 		backend.NewEbookBackend(s.deps.Host, backendID), backendID)
 	if err != nil {

@@ -360,6 +360,14 @@ function LibrariesTab({
     onError: (e: Error) => toast.error(e.message),
   });
 
+  // backends loads async (React Query); seed the sync target once it arrives
+  // so the button isn't stuck disabled on an available default.
+  useEffect(() => {
+    if (!syncBackend && backends[0]) {
+      setSyncBackend(String(backends[0].id));
+    }
+  }, [backends, syncBackend]);
+
   const addLibrary = () =>
     setDraft((items) => [
       ...items,
