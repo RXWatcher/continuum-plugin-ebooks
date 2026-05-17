@@ -49,8 +49,51 @@ func NewHostHTTPClient(baseURL, token string) *HostHTTPClient {
 	return &HostHTTPClient{
 		hostBaseURL: strings.TrimRight(baseURL, "/"),
 		token:       token,
-		hc:          &http.Client{Timeout: defaultTimeout},
+		hc: &http.Client{
+			Timeout: defaultTimeout,
+			// The host plugin-proxy returns the response directly; we never
+			// expect to *follow* a redirect. A backend plugin can influence
+			// the proxied response, so following a 3xx would let it point us
+			// (with the host bearer attached) at an arbitrary/internal host.
+			// Surface the 3xx as the response instead (callers that treat 302
+			// as success still see it).
+			CheckRedirect: func(*http.Request, []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		},
 	}
+}
+
+// validInstallID reports whether s is a safe path segment for the
+// /api/v1/plugins/<id><path> host-proxy URL. A backend target is either a
+// numeric install id ("7") or a plugin-id slug
+// ("continuum.bookwarehouse-ebook"), both of which are
+// [A-Za-z0-9._-]. Rejecting anything else stops a DB/config-sourced value
+// like "1/../../admin" or "a%2f.." from collapsing/escaping the proxy path
+// (SSRF / host-API traversal).
+func validInstallID(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+		case r == '.' || r == '_' || r == '-':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// truncForError caps an upstream body inlined into an error string (it
+// propagates into logs); the raw body can be up to maxResponseBytes.
+func truncForError(b []byte) string {
+	const limit = 512
+	if len(b) <= limit {
+		return string(b)
+	}
+	return string(b[:limit]) + "…(truncated)"
 }
 
 func (c *HostHTTPClient) WithRuntimeHost(host *runtimehost.Client) *HostHTTPClient {
@@ -86,7 +129,7 @@ func (c *HostHTTPClient) GetJSON(ctx context.Context, installID, pluginPath stri
 			})
 			var statusErr *runtimehost.HTTPStatusError
 			if errors.As(err, &statusErr) {
-				return statusErr.StatusCode, fmt.Errorf("upstream %d: %s", statusErr.StatusCode, string(statusErr.Body))
+				return statusErr.StatusCode, fmt.Errorf("upstream %d: %s", statusErr.StatusCode, truncForError(statusErr.Body))
 			}
 			if err != nil {
 				return 0, err
@@ -99,7 +142,7 @@ func (c *HostHTTPClient) GetJSON(ctx context.Context, installID, pluginPath stri
 		return 0, err
 	}
 	if code < 200 || code >= 300 {
-		return code, fmt.Errorf("upstream %d: %s", code, string(body))
+		return code, fmt.Errorf("upstream %d: %s", code, truncForError(body))
 	}
 	if err := json.Unmarshal(body, out); err != nil {
 		return code, fmt.Errorf("decode: %w", err)
@@ -111,6 +154,9 @@ func (c *HostHTTPClient) GetJSON(ctx context.Context, installID, pluginPath stri
 // Caller MUST close the returned io.ReadCloser. Returns the resp itself so
 // the caller can forward headers (Content-Type, Content-Length, etc).
 func (c *HostHTTPClient) GetStream(ctx context.Context, installID, pluginPath string, headers map[string]string) (*http.Response, error) {
+	if !validInstallID(installID) {
+		return nil, fmt.Errorf("invalid install id")
+	}
 	url := fmt.Sprintf("%s/api/v1/plugins/%s%s", c.hostBaseURL, installID, pluginPath)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -154,6 +200,9 @@ func (c *HostHTTPClient) do(ctx context.Context, method, installID, pluginPath s
 			}
 			return resp.Body, resp.StatusCode, nil
 		}
+	}
+	if !validInstallID(installID) {
+		return nil, 0, fmt.Errorf("invalid install id")
 	}
 	url := fmt.Sprintf("%s/api/v1/plugins/%s%s", c.hostBaseURL, installID, pluginPath)
 	var bodyReader *strings.Reader
