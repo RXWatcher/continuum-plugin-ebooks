@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/backend"
+	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/libsync"
 	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/store"
 )
 
@@ -25,6 +26,7 @@ func (s *Server) mountAdminRoutes(r chi.Router) {
 	r.Get("/admin/libraries", s.handleAdminListLibraries)
 	r.Put("/admin/libraries", s.handleAdminReplaceLibraries)
 	r.Get("/admin/backend-libraries", s.handleAdminBackendLibraries)
+	r.Post("/admin/libraries/sync", s.handleAdminSyncLibraries)
 	r.Get("/admin/cache", s.handleAdminCacheStats)
 	r.Get("/admin/cache/largest", s.handleAdminCacheLargest)
 	r.Get("/admin/kobo-sessions", s.handleAdminKoboSessions)
@@ -360,4 +362,24 @@ func (s *Server) handleAdminDeleteKosync(w http.ResponseWriter, r *http.Request)
 func (s *Server) handleAdminKindleLog(w http.ResponseWriter, r *http.Request) {
 	rows, _ := s.deps.Store.ListAllKindleSends(r.Context(), 200)
 	writeItems(w, 200, rows)
+}
+
+func (s *Server) handleAdminSyncLibraries(w http.ResponseWriter, r *http.Request) {
+	backendID := r.URL.Query().Get("backend_plugin_id")
+	if backendID == "" {
+		writeErr(w, 400, "backend_plugin_id required")
+		return
+	}
+	stats, err := libsync.Sync(r.Context(), s.deps.Store,
+		backend.NewEbookBackend(s.deps.Host, backendID), backendID)
+	if err != nil {
+		writeErr(w, 502, err.Error())
+		return
+	}
+	writeJSON(w, 200, map[string]any{
+		"created": stats.Created,
+		"updated": stats.Updated,
+		"pruned":  stats.Pruned,
+		"kept":    stats.Kept,
+	})
 }
