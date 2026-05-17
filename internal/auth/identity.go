@@ -37,7 +37,10 @@ func Middleware(next http.Handler) http.Handler {
 			Username: r.Header.Get("X-Continuum-User-Username"),
 			Email:    r.Header.Get("X-Continuum-User-Email"),
 		}
-		roles := r.Header.Get("X-Continuum-User-Roles")
+		roles := r.Header.Get("X-Continuum-User-Role")
+		if roles == "" {
+			roles = r.Header.Get("X-Continuum-User-Roles")
+		}
 		for _, role := range strings.Split(roles, ",") {
 			if strings.TrimSpace(role) == "admin" {
 				id.IsAdmin = true

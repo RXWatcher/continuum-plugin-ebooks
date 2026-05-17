@@ -1,0 +1,53 @@
+package auth
+
+import (
+	"net/http"
+	"net/http/httptest"
+	"testing"
+)
+
+func TestMiddlewareReadsHostSingularRoleHeader(t *testing.T) {
+	req := httptest.NewRequest("GET", "/", nil)
+	req.Header.Set("X-Continuum-User-Id", "u-1")
+	req.Header.Set("X-Continuum-User-Role", "admin")
+
+	var got Identity
+	handler := Middleware(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		var ok bool
+		got, ok = FromContext(r.Context())
+		if !ok {
+			t.Fatal("identity missing from context")
+		}
+	}))
+	handler.ServeHTTP(httptest.NewRecorder(), req)
+
+	if got.UserID != "u-1" {
+		t.Fatalf("UserID = %q, want u-1", got.UserID)
+	}
+	if !got.IsAdmin {
+		t.Fatal("IsAdmin = false, want true for X-Continuum-User-Role: admin")
+	}
+}
+
+func TestMiddlewareFallsBackToPluralRolesHeader(t *testing.T) {
+	req := httptest.NewRequest("GET", "/", nil)
+	req.Header.Set("X-Continuum-User-Id", "u-2")
+	req.Header.Set("X-Continuum-User-Roles", "user, admin")
+
+	var got Identity
+	handler := Middleware(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		var ok bool
+		got, ok = FromContext(r.Context())
+		if !ok {
+			t.Fatal("identity missing from context")
+		}
+	}))
+	handler.ServeHTTP(httptest.NewRecorder(), req)
+
+	if got.UserID != "u-2" {
+		t.Fatalf("UserID = %q, want u-2", got.UserID)
+	}
+	if !got.IsAdmin {
+		t.Fatal("IsAdmin = false, want true for fallback plural roles header")
+	}
+}
