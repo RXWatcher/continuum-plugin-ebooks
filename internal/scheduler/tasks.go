@@ -20,6 +20,7 @@ import (
 	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/event"
 	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/kindle"
 	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/koboref"
+	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/libsync"
 	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/store"
 	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/streaming"
 )
@@ -345,4 +346,25 @@ func (t *Tasks) fetchKindleSource(ctx context.Context, cfg store.Config, k store
 	}
 	_ = tmp.Close()
 	return tmp.Name(), func() { _ = os.Remove(tmp.Name()) }, nil
+}
+
+// PortalLibrarySync mirrors the configured target backend's libraries into
+// portal presentation shelves. No backend configured -> no-op. The
+// libsync.Sync guard makes a briefly-unavailable backend a safe (logged)
+// no-op rather than a destructive prune.
+func (t *Tasks) PortalLibrarySync(ctx context.Context) error {
+	cfg, err := t.Store.GetConfig(ctx)
+	if err != nil {
+		return fmt.Errorf("get config: %w", err)
+	}
+	if !cfg.HasBackend() {
+		return nil
+	}
+	target := cfg.BackendTarget()
+	if _, err := libsync.Sync(ctx, t.Store,
+		backend.NewEbookBackend(t.Host, target), target); err != nil {
+		t.Log.Warn("portal_library_sync", "err", err)
+		return err
+	}
+	return nil
 }

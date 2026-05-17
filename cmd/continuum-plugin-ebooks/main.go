@@ -92,6 +92,7 @@ func main() {
 			"kobo_session_reaper": t.KoboSessionReaper,
 			"opds_token_pruner":   t.OPDSTokenPruner,
 			"kindle_send_retrier": t.KindleSendRetrier,
+			"portal_library_sync": t.PortalLibrarySync,
 		}
 	})
 
