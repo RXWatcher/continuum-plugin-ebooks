@@ -134,10 +134,15 @@ func (m *Manager) StartOrJoin(ctx context.Context, cacheKey, bookID, format stri
 			return existing.entry, existing.err
 		}
 	}
-	// Leader.
+	// Leader. Decouple the shared fill from this one request's context: if the
+	// client that happened to win leadership disconnects mid-download, the
+	// blocked followers (still connected) must not all get a canceled-copy
+	// error. The fill keeps its own deadline so a hung upstream still fails.
 	defer m.inflight.Delete(cacheKey)
 	defer close(d.done)
-	d.entry, d.err = m.fetchAsLeader(ctx, cacheKey, bookID, format, fetch)
+	leaderCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 15*time.Minute)
+	defer cancel()
+	d.entry, d.err = m.fetchAsLeader(leaderCtx, cacheKey, bookID, format, fetch)
 	return d.entry, d.err
 }
 
@@ -242,7 +247,13 @@ func (m *Manager) EvictTo(ctx context.Context, targetBytes int64) (int, error) {
 		if busy {
 			continue
 		}
-		_ = os.Remove(m.PathFor(e))
+		// If the unlink fails for anything other than "already gone", keep the
+		// DB row so a later sweep retries — deleting the row here would orphan
+		// the on-disk file forever (nothing else references its sha-named path)
+		// and make TotalCacheBytes under-report real disk usage.
+		if err := os.Remove(m.PathFor(e)); err != nil && !os.IsNotExist(err) {
+			continue
+		}
 		if err := m.store.DeleteCacheEntry(ctx, e.ID); err == nil {
 			total -= e.BytesOnDisk
 			evicted++

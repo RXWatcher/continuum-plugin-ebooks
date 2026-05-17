@@ -20,7 +20,7 @@ import {
   Trash2,
   XCircle,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   adminCacheLargest,
@@ -221,6 +221,9 @@ export default function Admin() {
             backend={backend.data}
             libraries={libraries.data?.items ?? []}
             backends={backends.data ?? []}
+            backendsError={
+              backends.error instanceof Error ? backends.error.message : null
+            }
             loading={
               backend.isLoading || libraries.isLoading || backends.isLoading
             }
@@ -294,17 +297,27 @@ function LibrariesTab({
   backend,
   libraries,
   backends,
+  backendsError,
   loading,
 }: {
   backend?: BackendConfig;
   libraries: LibraryInfo[];
   backends: BackendOption[];
+  backendsError?: string | null;
   loading: boolean;
 }) {
   const qc = useQueryClient();
   const [draft, setDraft] = useState<LibraryInfo[]>([]);
+  // Only re-seed the editable draft when the server data actually changes
+  // (e.g. after a save assigns ids, or another admin edits). A background
+  // refetch (window refocus, refreshAll) returns identical data and must NOT
+  // clobber the operator's in-progress, unsaved library edits.
+  const syncedRef = useRef<string | null>(null);
 
   useEffect(() => {
+    const snapshot = JSON.stringify(libraries);
+    if (snapshot === syncedRef.current) return;
+    syncedRef.current = snapshot;
     setDraft(
       libraries.map((lib, index) => ({
         ...lib,
@@ -376,6 +389,12 @@ function LibrariesTab({
 
   return (
     <div className="space-y-4">
+      {backendsError && (
+        <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          Couldn't load installed library sources: {backendsError}. The source
+          dropdown below will be empty until this is resolved.
+        </div>
+      )}
       <div className="grid gap-3 md:grid-cols-3">
         <StatusPanel
           title="Visible libraries"

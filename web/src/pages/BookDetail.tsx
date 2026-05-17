@@ -163,7 +163,7 @@ export default function BookDetail() {
           {b.files.map((f) => (
             <Button asChild key={f.format} variant="outline" size="sm">
               <a
-                href={`${mountPath()}/api/v1/me/books/${encodeURIComponent(id)}/file?format=${f.format}`}
+                href={`${mountPath()}/api/v1/me/books/${encodeURIComponent(id)}/file?format=${encodeURIComponent(f.format.toLowerCase())}`}
               >
                 <Download className="mr-2 size-4" /> {f.format.toUpperCase()}
               </a>

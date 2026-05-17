@@ -67,7 +67,10 @@ func (s *Sender) Send(ctx context.Context, to, subject, attachmentPath, attachme
 	}
 	m := gomail.NewMessage()
 	m.SetHeader("From", from)
-	m.SetHeader("To", to)
+	// SetAddressHeader (not SetHeader) so a malformed/crafted recipient can't
+	// inject extra SMTP headers via CR/LF — defense in depth behind the
+	// handler's validateKindleAddress check.
+	m.SetAddressHeader("To", to, "")
 	if subject == "" {
 		subject = "Your Continuum ebook"
 	}

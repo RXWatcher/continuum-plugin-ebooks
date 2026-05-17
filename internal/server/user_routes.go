@@ -99,10 +99,10 @@ func (s *Server) targetBackend(r *http.Request) (*backend.EbookBackend, error) {
 	if err != nil {
 		return nil, err
 	}
-	if cfg.TargetBackendPluginID == "" {
+	if !cfg.HasBackend() {
 		return nil, fmt.Errorf("no backend configured")
 	}
-	return backend.NewEbookBackend(s.deps.Host, cfg.TargetBackendPluginID), nil
+	return backend.NewEbookBackend(s.deps.Host, cfg.BackendTarget()), nil
 }
 
 func (s *Server) targetLibrary(r *http.Request, libraryID int64) (store.PortalLibrary, error) {
@@ -114,13 +114,13 @@ func (s *Server) targetLibrary(r *http.Request, libraryID int64) (store.PortalLi
 		return lib, nil
 	}
 	cfg, err := s.deps.Store.GetConfig(r.Context())
-	if err != nil || cfg.TargetBackendPluginID == "" {
+	if err != nil || !cfg.HasBackend() {
 		return store.PortalLibrary{}, fmt.Errorf("no backend configured")
 	}
 	return store.PortalLibrary{
 		Name:            "Library",
 		MediaType:       "book",
-		BackendPluginID: cfg.TargetBackendPluginID,
+		BackendPluginID: cfg.BackendTarget(),
 		Enabled:         true,
 	}, nil
 }
@@ -130,6 +130,47 @@ func backendLibraryID(lib store.PortalLibrary) int64 {
 		return 0
 	}
 	return *lib.BackendLibraryID
+}
+
+// libResult is one portal library's outcome when fanning a catalog/search
+// request across every enabled library.
+type libResult struct {
+	lib store.PortalLibrary
+	env backend.PageEnvelope[backend.EbookSummary]
+	err error
+}
+
+// combineCatalogResults merges per-library backend results into one envelope.
+//
+// Root-cause guard: the previous combined loop did `if err != nil { continue }`
+// with no logger and no signal, so a misconfigured library produced an empty
+// 200 that looked like "no books" to the operator who just created it. Here a
+// non-nil error is returned only when *every* library failed (callers surface
+// it as 502); partial failures still return the libraries that worked.
+//
+// limit <= 0 disables truncation (search path); limit > 0 caps the merged
+// list (list path).
+func combineCatalogResults(results []libResult, limit int) (backend.PageEnvelope[backend.EbookSummary], error) {
+	combined := backend.PageEnvelope[backend.EbookSummary]{Items: []backend.EbookSummary{}}
+	succeeded := 0
+	var lastErr error
+	for _, res := range results {
+		if res.err != nil {
+			lastErr = res.err
+			continue
+		}
+		succeeded++
+		env := wrapCatalogItems(res.env, res.lib)
+		combined.Items = append(combined.Items, env.Items...)
+		combined.Total += env.Total
+	}
+	if succeeded == 0 && lastErr != nil {
+		return combined, lastErr
+	}
+	if limit > 0 && len(combined.Items) > limit {
+		combined.Items = combined.Items[:limit]
+	}
+	return combined, nil
 }
 
 func wrapCatalogItems(env backend.PageEnvelope[backend.EbookSummary], lib store.PortalLibrary) backend.PageEnvelope[backend.EbookSummary] {
@@ -194,12 +235,20 @@ func (s *Server) handleUpdateProgress(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	now := time.Now()
-	if err := s.deps.Store.UpsertUserData(r.Context(), store.UserData{
-		UserID: id.UserID, BookID: bookID,
-		LastCFI: body.LastCFI, CurrentPage: body.CurrentPage,
-		ReadProgress: body.ReadProgress, IsFinished: body.IsFinished,
-		LastReadAt: &now,
-	}); err != nil {
+	// Read-modify-write: a progress ping carries only progress fields, so we
+	// must preserve is_favorite/notes/rating (the upsert overwrites
+	// is_favorite/notes from EXCLUDED). Rebuilding UserData from scratch here
+	// silently wiped the user's favorite flag and notes every time they
+	// opened a book. Mirrors handleUpdateBookMeta's load-then-patch.
+	cur, _ := s.deps.Store.GetUserData(r.Context(), id.UserID, bookID)
+	cur.UserID = id.UserID
+	cur.BookID = bookID
+	cur.LastCFI = body.LastCFI
+	cur.CurrentPage = body.CurrentPage
+	cur.ReadProgress = body.ReadProgress
+	cur.IsFinished = body.IsFinished
+	cur.LastReadAt = &now
+	if err := s.deps.Store.UpsertUserData(r.Context(), cur); err != nil {
 		writeErr(w, 500, err.Error())
 		return
 	}
@@ -287,6 +336,13 @@ func (s *Server) cacheStream(w http.ResponseWriter, r *http.Request, installID, 
 		upstream, err := s.deps.Host.GetStream(ctx, installID, bk.FilePath(bookID, format), nil)
 		if err != nil {
 			return nil, nil, 0, "", err
+		}
+		// Never cache a non-success response: a 404/500/redirect/HTML error
+		// page would otherwise be written to disk, marked "ready", and served
+		// as the book to every subsequent reader until LRU eviction.
+		if upstream.StatusCode < 200 || upstream.StatusCode >= 300 {
+			_ = upstream.Body.Close()
+			return nil, nil, 0, "", fmt.Errorf("backend status %d", upstream.StatusCode)
 		}
 		return upstream.Body, upstream.Header, upstream.ContentLength, upstream.Header.Get("Content-Type"), nil
 	}
@@ -415,19 +471,35 @@ func (s *Server) handleListCatalog(w http.ResponseWriter, r *http.Request) {
 	if len(libs) > 1 && perLibraryLimit > 20 {
 		perLibraryLimit = 20
 	}
-	combined := backend.PageEnvelope[backend.EbookSummary]{Items: []backend.EbookSummary{}}
+	// Composite pagination: on the first page (no/!valid cursor) query every
+	// library; afterwards only the libraries that still had pages, each
+	// resumed from its own backend cursor. This keeps every book reachable.
+	cursors, paging := decodeCatalogCursor(r.URL.Query().Get("cursor"))
+	results := make([]libResult, 0, len(libs))
+	nextCursors := map[int64]string{}
 	for _, lib := range libs {
-		env, err := backend.NewEbookBackend(s.deps.Host, lib.BackendPluginID).ListCatalog(r.Context(), queryFor(lib, perLibraryLimit))
-		if err != nil {
-			continue
+		backendCursor := ""
+		if paging {
+			c, ok := cursors[lib.ID]
+			if !ok {
+				continue // exhausted on an earlier page
+			}
+			backendCursor = c
 		}
-		env = wrapCatalogItems(env, lib)
-		combined.Items = append(combined.Items, env.Items...)
-		combined.Total += env.Total
+		q := queryFor(lib, perLibraryLimit)
+		q.Cursor = backendCursor
+		env, err := backend.NewEbookBackend(s.deps.Host, lib.BackendPluginID).ListCatalog(r.Context(), q)
+		results = append(results, libResult{lib: lib, env: env, err: err})
+		if err == nil && env.NextCursor != "" {
+			nextCursors[lib.ID] = env.NextCursor
+		}
 	}
-	if len(combined.Items) > limit {
-		combined.Items = combined.Items[:limit]
+	combined, err := combineCatalogResults(results, 0)
+	if err != nil {
+		writeErr(w, 502, err.Error())
+		return
 	}
+	combined.NextCursor = encodeCatalogCursor(nextCursors)
 	writeJSON(w, 200, combined)
 }
 
@@ -475,15 +547,15 @@ func (s *Server) handleSearchCatalog(w http.ResponseWriter, r *http.Request) {
 		}
 		libs = []store.PortalLibrary{lib}
 	}
-	combined := backend.PageEnvelope[backend.EbookSummary]{Items: []backend.EbookSummary{}}
+	results := make([]libResult, 0, len(libs))
 	for _, lib := range libs {
 		env, err := backend.NewEbookBackend(s.deps.Host, lib.BackendPluginID).Search(r.Context(), query)
-		if err != nil {
-			continue
-		}
-		env = wrapCatalogItems(env, lib)
-		combined.Items = append(combined.Items, env.Items...)
-		combined.Total += env.Total
+		results = append(results, libResult{lib: lib, env: env, err: err})
+	}
+	combined, err := combineCatalogResults(results, 0)
+	if err != nil {
+		writeErr(w, 502, err.Error())
+		return
 	}
 	writeJSON(w, 200, combined)
 }
@@ -622,7 +694,7 @@ func (s *Server) handleCreateRequest(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if targetPluginID == "" {
-		targetPluginID = cfg.TargetBackendPluginID
+		targetPluginID = cfg.BackendTarget()
 	}
 	if targetPluginID == "" {
 		writeErr(w, 412, "no download provider configured")
@@ -663,7 +735,7 @@ func (s *Server) handleCreateRequest(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleRequestRoutingPreview(w http.ResponseWriter, r *http.Request) {
 	mediaType := normalizeMediaType(r.URL.Query().Get("media_type"))
 	cfg, _ := s.deps.Store.GetConfig(r.Context())
-	targetPluginID := cfg.TargetBackendPluginID
+	targetPluginID := cfg.BackendTarget()
 	formatPref := ""
 	autoMonitor := false
 	source := "default"

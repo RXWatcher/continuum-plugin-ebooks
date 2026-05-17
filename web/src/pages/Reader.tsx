@@ -66,6 +66,10 @@ export default function Reader() {
 
   useEffect(() => {
     if (!id || !viewerRef.current || selectedFormat !== "epub") return;
+    // Wait for the saved position to load before first render. Otherwise the
+    // rendition displays page 1, fires "relocated", and persists a page-1 CFI
+    // over the user's real saved position before userData resolves.
+    if (userData.isLoading) return;
     const url = `${mountPath()}/api/v1/me/books/${encodeURIComponent(id)}/file?format=${encodeURIComponent(selectedFormat)}`;
     const b = ePub(url);
     setBook(b);
@@ -96,7 +100,7 @@ export default function Reader() {
       b.destroy();
       renditionRef.current = null;
     };
-  }, [id, selectedFormat, spread, userData.data?.last_cfi]);
+  }, [id, selectedFormat, spread, userData.isLoading, userData.data?.last_cfi]);
 
   useEffect(() => {
     const r = renditionRef.current;

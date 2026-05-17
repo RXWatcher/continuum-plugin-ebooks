@@ -64,7 +64,7 @@ func (t *Tasks) RequestReconciler(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("get config: %w", err)
 	}
-	if cfg.TargetBackendPluginID == "" {
+	if !cfg.HasBackend() {
 		return nil
 	}
 	rows, err := t.Store.ListNonTerminal(ctx, 100)
@@ -81,7 +81,7 @@ func (t *Tasks) RequestReconciler(ctx context.Context) error {
 		}
 		targetPluginID := r.TargetPluginID
 		if targetPluginID == "" {
-			targetPluginID = cfg.TargetBackendPluginID
+			targetPluginID = cfg.BackendTarget()
 		}
 		bk := backend.NewEbookBackend(t.Host, targetPluginID)
 		snap, err := bk.GetRequestSnapshot(ctx, r.ExternalID)
@@ -156,8 +156,15 @@ func (t *Tasks) CacheEvictor(ctx context.Context) error {
 // cleaning up after genuinely-abandoned conversions.
 func (t *Tasks) KoboSessionReaper(ctx context.Context) error {
 	now := time.Now()
+	// Only reap sessions that expired more than koboReapGrace ago. A transfer
+	// that started just before expiry can still be mid-io.Copy; the grace
+	// window (well beyond the 120s server WriteTimeout) keeps its file alive
+	// until the copy finishes — defense in depth that holds even when
+	// KoboRefs is nil and the in-process refcount can't see the reader.
+	const koboReapGrace = 5 * time.Minute
+	cutoff := now.Add(-koboReapGrace)
 	if t.KoboRefs != nil {
-		candidates, err := t.Store.ListStaleKoboSessions(ctx, now)
+		candidates, err := t.Store.ListStaleKoboSessions(ctx, cutoff)
 		if err != nil {
 			return err
 		}
@@ -174,7 +181,7 @@ func (t *Tasks) KoboSessionReaper(ctx context.Context) error {
 			}
 		}
 	} else {
-		expired, err := t.Store.ExpireStaleKoboSessions(ctx, now)
+		expired, err := t.Store.ExpireStaleKoboSessions(ctx, cutoff)
 		if err != nil {
 			return err
 		}
@@ -280,7 +287,7 @@ func (t *Tasks) KindleSendRetrier(ctx context.Context) error {
 // temp file.
 func (t *Tasks) fetchKindleSource(ctx context.Context, cfg store.Config, k store.KindleSend) (string, func(), error) {
 	noop := func() {}
-	backendID := cfg.TargetBackendPluginID
+	backendID := cfg.BackendTarget()
 	_, backendBookID, scoped := decodeBookRef(k.BookID)
 	if scoped {
 		libraryID, _, _ := decodeBookRef(k.BookID)

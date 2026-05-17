@@ -1,1 +1,5 @@
-DROP TABLE IF EXISTS portal_library;
+-- no-op: portal_library is owned by migration 0007. 0011 only re-applied the
+-- CREATE TABLE IF NOT EXISTS for dev databases that skipped 0007 (0008-0010
+-- are matching no-ops). Dropping the table here would destroy all
+-- operator-configured libraries on an ordinary single-step rollback
+-- (v11 -> v10). The table is dropped only when rolling back past 0007.

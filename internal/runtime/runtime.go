@@ -7,6 +7,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
+	"strings"
 	"sync"
 
 	pluginv1 "github.com/ContinuumApp/continuum-plugin-sdk/pkg/pluginproto/continuum/plugin/v1"
@@ -89,11 +91,11 @@ func (s *Server) Configure(_ context.Context, req *pluginv1.ConfigureRequest) (*
 				cfg.OpdsRealm = s
 			}
 		case "kindle_smtp_config":
-			if b, err := json.Marshal(val); err == nil {
+			if b, ok := marshalJSONValue(val); ok {
 				cfg.KindleSMTPConfig = b
 			}
 		case "path_remappings":
-			if b, err := json.Marshal(val); err == nil {
+			if b, ok := marshalJSONValue(val); ok {
 				cfg.PathRemappings = b
 			}
 		case "auto_approve_requests":
@@ -143,6 +145,27 @@ func intFrom(v any) (int, bool) {
 		return n, true
 	case int64:
 		return int(n), true
+	case string:
+		// Portal/JSON number controls sometimes serialize as strings.
+		if i, err := strconv.Atoi(strings.TrimSpace(n)); err == nil {
+			return i, true
+		}
 	}
 	return 0, false
+}
+
+// marshalJSONValue serializes a config value to JSON, returning ok=false when
+// the value is absent or JSON-null. Without this guard a config entry sent
+// without its inner "value" produced the 4-byte literal "null", which slips
+// past the len()>2 / != "{}" emptiness checks downstream and breaks Kindle
+// sends and path remapping.
+func marshalJSONValue(val any) ([]byte, bool) {
+	if val == nil {
+		return nil, false
+	}
+	b, err := json.Marshal(val)
+	if err != nil || string(b) == "null" {
+		return nil, false
+	}
+	return b, true
 }

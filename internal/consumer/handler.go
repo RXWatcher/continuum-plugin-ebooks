@@ -5,7 +5,7 @@ package consumer
 
 import (
 	"context"
-	"time"
+	"fmt"
 
 	pluginv1 "github.com/ContinuumApp/continuum-plugin-sdk/pkg/pluginproto/continuum/plugin/v1"
 
@@ -25,8 +25,13 @@ func New(depsFn func() *Deps) *Handler { return &Handler{depsFn: depsFn} }
 
 func (h *Handler) HandleEvent(ctx context.Context, req *pluginv1.HandleEventRequest) (*pluginv1.HandleEventResponse, error) {
 	d := h.depsFn()
-	if d == nil || req.GetPayload() == nil {
-		return &pluginv1.HandleEventResponse{}, nil
+	if d == nil {
+		// Capability servers serve before Configure runs. Nack so the host
+		// redelivers once configured, instead of acking and dropping the event.
+		return nil, fmt.Errorf("plugin not configured yet")
+	}
+	if req.GetPayload() == nil {
+		return &pluginv1.HandleEventResponse{}, nil // malformed; redelivery won't help
 	}
 	p := req.GetPayload().AsMap()
 	requestID := requestIDFromPayload(p)
@@ -44,22 +49,30 @@ func (h *Handler) HandleEvent(ctx context.Context, req *pluginv1.HandleEventRequ
 			break
 		}
 	}
-	_ = time.Now()
+	var err error
 	switch leaf {
 	case "request_acknowledged":
-		_ = d.Store.UpdateRequestStatus(ctx, requestID, "acknowledged", externalID, "", "", "")
+		err = d.Store.AdvanceRequestStatus(ctx, requestID, "acknowledged", externalID, "", "")
 	case "request_status_changed":
 		status, _ := p["status"].(string)
 		if status == "" {
-			status = "acknowledged"
+			return &pluginv1.HandleEventResponse{}, nil // nothing to apply
 		}
-		_ = d.Store.UpdateRequestStatus(ctx, requestID, status, externalID, "", "", "")
+		err = d.Store.AdvanceRequestStatus(ctx, requestID, status, externalID, "", "")
 	case "request_fulfilled":
 		bookID, _ := p["fulfilled_book_id"].(string)
-		_ = d.Store.UpdateRequestStatus(ctx, requestID, "fulfilled", externalID, "", "", bookID)
+		err = d.Store.AdvanceRequestStatus(ctx, requestID, "fulfilled", externalID, "", bookID)
 	case "request_failed":
 		reason, _ := p["reason"].(string)
-		_ = d.Store.UpdateRequestStatus(ctx, requestID, "failed", externalID, "", reason, "")
+		err = d.Store.AdvanceRequestStatus(ctx, requestID, "failed", externalID, reason, "")
+	default:
+		return &pluginv1.HandleEventResponse{}, nil // unknown event; ack
+	}
+	if err != nil {
+		// Includes ErrNotFound (the request row may not be visible yet) and
+		// real DB errors — nack so the host redelivers rather than silently
+		// losing a terminal status transition.
+		return nil, fmt.Errorf("handle %s: %w", leaf, err)
 	}
 	return &pluginv1.HandleEventResponse{}, nil
 }

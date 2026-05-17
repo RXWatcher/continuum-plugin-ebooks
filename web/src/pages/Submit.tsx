@@ -43,7 +43,9 @@ export default function Submit() {
     enabled: !providerID,
   });
   const automaticProvider = (providers.data ?? []).find(
-    (provider) => String(provider.id) === routingPreview.data?.target_plugin_id,
+    (provider) =>
+      String(provider.id) === routingPreview.data?.target_plugin_id ||
+      provider.plugin_id === routingPreview.data?.target_plugin_id,
   );
 
   const m = useMutation({

@@ -648,7 +648,18 @@ async function fetchInstalledEbookPlugins(): Promise<InstalledBackend[]> {
     headers,
     credentials: "include",
   });
-  if (!res.ok) return [];
+  if (!res.ok) {
+    // Throw instead of returning [] so React Query surfaces the failure.
+    // Silently returning an empty list rendered a misleading "no library
+    // sources — install one" state when the real problem was an auth/host
+    // error, making backend setup undebuggable.
+    const detail = await res.text().catch(() => "");
+    throw new Error(
+      `Could not load installed backends (HTTP ${res.status})${
+        detail ? `: ${detail.slice(0, 200)}` : ""
+      }`,
+    );
+  }
   const body = await res.json();
   const installations = Array.isArray(body) ? body : body.installations || [];
   return installations

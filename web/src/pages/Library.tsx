@@ -1,8 +1,9 @@
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router";
 import { X } from "lucide-react";
 import { listCatalog, listLibraries, type CatalogFilters } from "@/lib/api";
 import { BookCard } from "@/components/BookCard";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 
 // Library is the catalog browser. Optional filter query params drive a server-
@@ -25,19 +26,23 @@ export default function Library() {
     queryKey: ["catalog", "libraries"],
     queryFn: listLibraries,
   });
-  const q = useQuery({
+  const q = useInfiniteQuery({
     queryKey: ["catalog", "library", filters],
-    queryFn: () => listCatalog("", "added", "desc", 50, filters),
+    queryFn: ({ pageParam }) =>
+      listCatalog(pageParam, "added", "desc", 50, filters),
+    initialPageParam: "",
+    getNextPageParam: (last) => last.next_cursor || undefined,
   });
+  const items = q.data?.pages.flatMap((p) => p.items) ?? [];
+  const total = q.data?.pages[0]?.total;
 
   return (
     <div className="space-y-4">
       <header className="flex items-center justify-between gap-2">
         <h1 className="text-xl font-semibold">Library</h1>
-        {q.data?.total ? (
+        {total ? (
           <span className="text-xs text-muted-foreground">
-            {q.data.total.toLocaleString()}{" "}
-            {q.data.total === 1 ? "book" : "books"}
+            {total.toLocaleString()} {total === 1 ? "book" : "books"}
           </span>
         ) : null}
       </header>
@@ -88,12 +93,26 @@ export default function Library() {
         </div>
       ) : q.error ? (
         <p className="text-sm text-destructive">{(q.error as Error).message}</p>
-      ) : q.data && q.data.items.length > 0 ? (
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
-          {q.data.items.map((b) => (
-            <BookCard key={b.id} book={b} />
-          ))}
-        </div>
+      ) : items.length > 0 ? (
+        <>
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+            {items.map((b) => (
+              <BookCard key={b.id} book={b} />
+            ))}
+          </div>
+          {q.hasNextPage && (
+            <div className="flex justify-center pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => q.fetchNextPage()}
+                disabled={q.isFetchingNextPage}
+              >
+                {q.isFetchingNextPage ? "Loading…" : "Load more"}
+              </Button>
+            </div>
+          )}
+        </>
       ) : (
         <p className="text-sm text-muted-foreground">
           {activeFilter ? "No books match this filter." : "No ebooks yet."}

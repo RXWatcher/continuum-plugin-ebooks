@@ -35,13 +35,23 @@ type KosyncBookLink struct {
 }
 
 func (s *Store) UpsertKosyncUser(ctx context.Context, u KosyncUser) error {
-	_, err := s.pool.Exec(ctx, `
+	// The DO UPDATE only fires when the conflicting row is owned by the SAME
+	// continuum user, so re-registering / rotating a password works but a
+	// different user cannot hijack an existing username (the conflict then
+	// updates zero rows). kosync_username stays globally unique because
+	// auth lookup is by username.
+	tag, err := s.pool.Exec(ctx, `
 		INSERT INTO kosync_user (user_id, kosync_username, kosync_password_hash)
 		VALUES ($1, $2, $3)
-		ON CONFLICT (kosync_username) DO UPDATE SET kosync_password_hash = EXCLUDED.kosync_password_hash
+		ON CONFLICT (kosync_username) DO UPDATE
+			SET kosync_password_hash = EXCLUDED.kosync_password_hash
+			WHERE kosync_user.user_id = EXCLUDED.user_id
 	`, u.UserID, u.KosyncUsername, u.KosyncPasswordHash)
 	if err != nil {
 		return fmt.Errorf("upsert kosync_user: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrKosyncUsernameTaken
 	}
 	return nil
 }
@@ -83,15 +93,28 @@ func (s *Store) DeleteKosyncUser(ctx context.Context, username string) error {
 	if err != nil {
 		return err
 	}
-	_, _ = s.pool.Exec(ctx, `DELETE FROM kosync_progress WHERE user_id = $1`, u.UserID)
-	tag, err := s.pool.Exec(ctx, `DELETE FROM kosync_user WHERE kosync_username = $1`, username)
+	// One transaction so we never orphan kosync_progress/kosync_book_link
+	// rows (keyed by user_id) by deleting the user but failing the rest, or
+	// vice versa. The progress delete error is no longer discarded.
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("delete kosync_user: %w", err)
+	}
+	defer tx.Rollback(ctx)
+	if _, err := tx.Exec(ctx, `DELETE FROM kosync_progress WHERE user_id = $1`, u.UserID); err != nil {
+		return fmt.Errorf("delete kosync_progress: %w", err)
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM kosync_book_link WHERE user_id = $1`, u.UserID); err != nil {
+		return fmt.Errorf("delete kosync_book_link: %w", err)
+	}
+	tag, err := tx.Exec(ctx, `DELETE FROM kosync_user WHERE kosync_username = $1`, username)
 	if err != nil {
 		return fmt.Errorf("delete kosync_user: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
 		return ErrNotFound
 	}
-	return nil
+	return tx.Commit(ctx)
 }
 
 // UpsertKosyncProgress writes progress scoped to (user_id, document, device_id).
@@ -122,7 +145,7 @@ func (s *Store) GetKosyncProgress(ctx context.Context, userID, document string) 
 	row := s.pool.QueryRow(ctx, `
 		SELECT user_id, document, progress, percentage, COALESCE(device,''), device_id, timestamp
 		FROM kosync_progress WHERE user_id = $1 AND document = $2
-		ORDER BY timestamp DESC LIMIT 1
+		ORDER BY timestamp DESC, device_id DESC LIMIT 1
 	`, userID, document)
 	var p KosyncProgress
 	if err := row.Scan(&p.UserID, &p.Document, &p.Progress, &p.Percentage, &p.Device, &p.DeviceID, &p.Timestamp); err != nil {

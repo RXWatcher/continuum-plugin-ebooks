@@ -44,6 +44,21 @@ func (c Config) BackendPluginID() string {
 	return c.TargetBackendPluginID
 }
 
+// BackendTarget returns the identifier used to address the configured backend
+// through the host: the installation id when set (preferred since the 0013
+// installation-id migration), otherwise a legacy plugin id. Empty means no
+// backend is configured. Every backend-targeting call site must resolve
+// through this so config done via target_backend_installation_id is honored.
+func (c Config) BackendTarget() string {
+	if id := c.BackendInstallID(); id != "" {
+		return id
+	}
+	return c.BackendPluginID()
+}
+
+// HasBackend reports whether a usable backend target is configured.
+func (c Config) HasBackend() bool { return c.BackendTarget() != "" }
+
 func isNumericID(value string) bool {
 	value = strings.TrimSpace(value)
 	if value == "" {

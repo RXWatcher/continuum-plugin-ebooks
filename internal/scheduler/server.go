@@ -4,6 +4,7 @@ package scheduler
 
 import (
 	"context"
+	"fmt"
 
 	pluginv1 "github.com/ContinuumApp/continuum-plugin-sdk/pkg/pluginproto/continuum/plugin/v1"
 )
@@ -19,13 +20,18 @@ type Server struct {
 func New(tasksFn func() map[string]TaskFn) *Server { return &Server{tasksFn: tasksFn} }
 
 func (s *Server) Run(ctx context.Context, req *pluginv1.RunScheduledTaskRequest) (*pluginv1.RunScheduledTaskResponse, error) {
-	if s.tasksFn == nil {
-		return &pluginv1.RunScheduledTaskResponse{}, nil
+	tasks := map[string]TaskFn(nil)
+	if s.tasksFn != nil {
+		tasks = s.tasksFn()
 	}
-	tasks := s.tasksFn()
+	if tasks == nil {
+		// Not configured yet — return an error so the host retries this tick
+		// once Configure has run, instead of reporting a successful no-op.
+		return nil, fmt.Errorf("plugin not configured yet")
+	}
 	fn, ok := tasks[req.GetTaskKey()]
 	if !ok || fn == nil {
-		return &pluginv1.RunScheduledTaskResponse{}, nil
+		return nil, fmt.Errorf("unknown task_key %q", req.GetTaskKey())
 	}
 	if err := fn(ctx); err != nil {
 		return nil, err

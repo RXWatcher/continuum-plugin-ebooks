@@ -146,11 +146,11 @@ func (s *Server) handleOPDSCatalog(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	cfg, _ := s.deps.Store.GetConfig(r.Context())
-	if cfg.TargetBackendPluginID == "" {
+	if !cfg.HasBackend() {
 		writeErr(w, 412, "no backend")
 		return
 	}
-	bk := backend.NewEbookBackend(s.deps.Host, cfg.TargetBackendPluginID)
+	bk := backend.NewEbookBackend(s.deps.Host, cfg.BackendTarget())
 	limit := opdsCatalogLimit(r)
 	cursor := r.URL.Query().Get("cursor")
 	env, err := bk.ListCatalog(r.Context(), backend.CatalogQuery{
@@ -182,11 +182,11 @@ func (s *Server) handleOPDSSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	cfg, _ := s.deps.Store.GetConfig(r.Context())
-	if cfg.TargetBackendPluginID == "" {
+	if !cfg.HasBackend() {
 		writeErr(w, 412, "no backend")
 		return
 	}
-	bk := backend.NewEbookBackend(s.deps.Host, cfg.TargetBackendPluginID)
+	bk := backend.NewEbookBackend(s.deps.Host, cfg.BackendTarget())
 	env, err := bk.Search(r.Context(), q)
 	if err != nil {
 		writeErr(w, 502, err.Error())
@@ -223,11 +223,11 @@ func (s *Server) handleOPDSBookEntry(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	cfg, _ := s.deps.Store.GetConfig(r.Context())
-	if cfg.TargetBackendPluginID == "" {
+	if !cfg.HasBackend() {
 		writeErr(w, 412, "no backend")
 		return
 	}
-	bk := backend.NewEbookBackend(s.deps.Host, cfg.TargetBackendPluginID)
+	bk := backend.NewEbookBackend(s.deps.Host, cfg.BackendTarget())
 	d, err := bk.GetBook(r.Context(), chi.URLParam(r, "id"))
 	if err != nil {
 		writeErr(w, 502, err.Error())
@@ -256,14 +256,14 @@ func (s *Server) handleOPDSDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	cfg, _ := s.deps.Store.GetConfig(r.Context())
-	if cfg.TargetBackendPluginID == "" {
+	if !cfg.HasBackend() {
 		writeErr(w, 412, "no backend")
 		return
 	}
-	bk := backend.NewEbookBackend(s.deps.Host, cfg.TargetBackendPluginID)
+	bk := backend.NewEbookBackend(s.deps.Host, cfg.BackendTarget())
 	bookID := chi.URLParam(r, "id")
 	format := chi.URLParam(r, "format")
-	resp, err := s.deps.Host.GetStream(r.Context(), cfg.TargetBackendPluginID, bk.FilePath(bookID, format), nil)
+	resp, err := s.deps.Host.GetStream(r.Context(), cfg.BackendTarget(), bk.FilePath(bookID, format), nil)
 	if err != nil {
 		writeErr(w, 502, err.Error())
 		return
@@ -453,6 +453,10 @@ func (s *Server) handleKosyncCreate(w http.ResponseWriter, r *http.Request) {
 		KosyncUsername:     body.Username,
 		KosyncPasswordHash: string(hash),
 	}); err != nil {
+		if errors.Is(err, store.ErrKosyncUsernameTaken) {
+			writeErr(w, 409, "kosync username already taken")
+			return
+		}
 		writeErr(w, 500, err.Error())
 		return
 	}

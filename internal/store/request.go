@@ -146,6 +146,45 @@ func (s *Store) UpdateRequestStatus(ctx context.Context, id, status, externalID,
 	return nil
 }
 
+// AdvanceRequestStatus is the event-driven counterpart of
+// UpdateRequestStatus: it refuses to move a request OUT of a terminal state
+// (fulfilled/failed/denied/cancelled). Backend events are unordered and
+// at-least-once, so a delayed/duplicate "downloading" must not resurrect a
+// already-fulfilled request. Returns:
+//   - nil            : status advanced, or row already terminal (benign no-op)
+//   - ErrNotFound    : no such request (caller should retry — the submit row
+//     may not be visible yet — or treat as a foreign event)
+//   - other error    : real DB failure (caller should nack for redelivery)
+func (s *Store) AdvanceRequestStatus(ctx context.Context, id, status, externalID, failure, fulfilledBookID string) error {
+	tag, err := s.pool.Exec(ctx, `
+		UPDATE request SET status = $2,
+		    external_id       = COALESCE(NULLIF($3,''), external_id),
+		    failure_reason    = COALESCE(NULLIF($4,''), failure_reason),
+		    fulfilled_book_id = COALESCE(NULLIF($5,''), fulfilled_book_id),
+		    updated_at        = now(),
+		    fulfilled_at      = CASE WHEN $2='fulfilled' AND fulfilled_at IS NULL THEN now() ELSE fulfilled_at END
+		WHERE id = $1
+		  AND status NOT IN ('fulfilled','failed','denied','cancelled')
+	`, id, status, externalID, failure, fulfilledBookID)
+	if err != nil {
+		return fmt.Errorf("advance request: %w", err)
+	}
+	if tag.RowsAffected() == 1 {
+		return nil
+	}
+	// 0 rows: either the request doesn't exist, or it's already terminal
+	// (guard blocked the regression). Distinguish so the consumer can retry
+	// the former but ack the latter.
+	var dummy string
+	if err := s.pool.QueryRow(ctx, `SELECT id FROM request WHERE id = $1`, id).Scan(&dummy); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrNotFound
+		}
+		return fmt.Errorf("advance request lookup: %w", err)
+	}
+	return nil // exists and terminal — nothing to do
+}
+
 func (s *Store) MarkFulfilled(ctx context.Context, id, fulfilledBookID string) error {
 	return s.UpdateRequestStatus(ctx, id, "fulfilled", "", "", "", fulfilledBookID)
 }

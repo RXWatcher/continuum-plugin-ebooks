@@ -57,7 +57,28 @@ func main() {
 		standaloneOnce   sync.Once
 		standaloneAddr   atomic.Value // string
 		standaloneSrvPtr atomic.Pointer[http.Server]
+		drainOnce        sync.Once
 	)
+
+	// drainStandalone gracefully shuts the standalone listener (if it bound a
+	// port) with a 10s window so in-flight reader/Kobo/OPDS transfers finish.
+	// Idempotent: invoked from both the signal handler and after
+	// sdkruntime.Serve returns, since the SDK runtime can exit on broker
+	// close without our SIGTERM handler ever firing.
+	drainStandalone := func() {
+		drainOnce.Do(func() {
+			sl := standaloneSrvPtr.Load()
+			if sl == nil {
+				return
+			}
+			logger.Info("draining standalone http listener", "addr", sl.Addr)
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			if err := sl.Shutdown(ctx); err != nil {
+				logger.Warn("standalone http drain returned error", "err", err)
+			}
+		})
+	}
 
 	consumerHandler := consumer.New(func() *consumer.Deps { return consumerDepsP.Load() })
 	schedulerSrv := scheduler.New(func() map[string]scheduler.TaskFn {
@@ -226,14 +247,7 @@ func main() {
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-sigCh
-		if sl := standaloneSrvPtr.Load(); sl != nil {
-			logger.Info("draining standalone http listener", "addr", sl.Addr)
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			defer cancel()
-			if err := sl.Shutdown(ctx); err != nil {
-				logger.Warn("standalone http drain returned error", "err", err)
-			}
-		}
+		drainStandalone()
 	}()
 
 	sdkruntime.Serve(sdkruntime.ServeConfig{
@@ -245,6 +259,9 @@ func main() {
 			ScheduledTask: schedulerSrv,
 		},
 	})
+	// Serve returned: the host is tearing us down. Drain the standalone
+	// listener here too — broker close doesn't deliver SIGTERM to our handler.
+	drainStandalone()
 }
 
 func loadManifest() (*pluginv1.PluginManifest, error) {

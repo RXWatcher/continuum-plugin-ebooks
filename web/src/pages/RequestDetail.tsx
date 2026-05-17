@@ -20,7 +20,11 @@ function providerName(
   providers: Awaited<ReturnType<typeof fetchDownloadProviders>>,
   id: string,
 ) {
-  const provider = providers.find((item) => String(item.id) === id);
+  // target_plugin_id may be a numeric installation id OR a plugin-id string
+  // (rule/default routing stores the plugin id), so match either.
+  const provider = providers.find(
+    (item) => String(item.id) === id || item.plugin_id === id,
+  );
   return provider ? provider.display_name : `Install ${id}`;
 }
 
