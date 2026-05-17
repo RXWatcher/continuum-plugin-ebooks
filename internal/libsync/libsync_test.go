@@ -1,6 +1,8 @@
 package libsync
 
 import (
+	"context"
+	"errors"
 	"testing"
 
 	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/backend"
@@ -117,5 +119,73 @@ func TestReconcile_DuplicateManagedNotSilentlyDropped(t *testing.T) {
 	}
 	if n != 1 {
 		t.Fatalf("want exactly 1 surviving row for backend lib 5, got %d (%+v)", n, out)
+	}
+}
+
+type fakeStore struct {
+	existing   []store.PortalLibrary
+	replaced   bool
+	replacedTo []store.PortalLibrary
+}
+
+func (f *fakeStore) ListPortalLibraries(_ context.Context, _ bool) ([]store.PortalLibrary, error) {
+	return f.existing, nil
+}
+func (f *fakeStore) ReplacePortalLibraries(_ context.Context, libs []store.PortalLibrary) error {
+	f.replaced = true
+	f.replacedTo = libs
+	return nil
+}
+
+type fakeLister struct {
+	libs []backend.LibraryInfo
+	err  error
+}
+
+func (f *fakeLister) ListLibraries(_ context.Context) ([]backend.LibraryInfo, error) {
+	return f.libs, f.err
+}
+
+func TestSync_GuardBackendErrorNoWrite(t *testing.T) {
+	fs := &fakeStore{}
+	_, err := Sync(context.Background(), fs, &fakeLister{err: errors.New("upstream down")}, "42")
+	if err == nil {
+		t.Fatal("expected error on backend fetch failure")
+	}
+	if fs.replaced {
+		t.Fatal("store must NOT be written when the backend fetch failed")
+	}
+}
+
+func TestSync_GuardZeroLibrariesNoWrite(t *testing.T) {
+	fs := &fakeStore{existing: []store.PortalLibrary{{ID: 1, Name: "X", BackendPluginID: "42"}}}
+	_, err := Sync(context.Background(), fs, &fakeLister{libs: nil}, "42")
+	if err == nil {
+		t.Fatal("expected error when backend returns zero libraries")
+	}
+	if fs.replaced {
+		t.Fatal("store must NOT be written (catastrophic-prune guard)")
+	}
+}
+
+func TestSync_HappyPathWritesReconciled(t *testing.T) {
+	fs := &fakeStore{}
+	stats, err := Sync(context.Background(), fs,
+		&fakeLister{libs: []backend.LibraryInfo{{ID: 5, Name: "Comics", MediaType: "comics"}}}, "42")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !fs.replaced || len(fs.replacedTo) != 1 || stats.Created != 1 {
+		t.Fatalf("expected one created row persisted; replaced=%v to=%+v stats=%+v", fs.replaced, fs.replacedTo, stats)
+	}
+}
+
+func TestSync_EmptyBackendIDErrors(t *testing.T) {
+	fs := &fakeStore{}
+	if _, err := Sync(context.Background(), fs, &fakeLister{}, ""); err == nil {
+		t.Fatal("empty backendID must error")
+	}
+	if fs.replaced {
+		t.Fatal("no write on empty backendID")
 	}
 }
