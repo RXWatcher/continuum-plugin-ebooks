@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strconv"
 	"strings"
 	"sync"
@@ -32,6 +33,31 @@ type Config struct {
 }
 
 func (c Config) Configured() bool { return c.DatabaseURL != "" }
+
+func mask(s string) string {
+	if s == "" {
+		return ""
+	}
+	return "***redacted***"
+}
+
+// LogValue implements slog.LogValuer so slog.Any("cfg", c) never serializes
+// the DSN (DB password) or the Kindle SMTP config (SMTP password).
+func (c Config) LogValue() slog.Value {
+	return slog.GroupValue(
+		slog.String("database_url", mask(c.DatabaseURL)),
+		slog.String("cache_dir", c.CacheDir),
+		slog.String("default_streaming_mode", c.DefaultStreamingMode),
+		slog.String("opds_realm", c.OpdsRealm),
+		slog.String("kindle_smtp_config", mask(string(c.KindleSMTPConfig))),
+		slog.String("target_backend_plugin_id", c.TargetBackendPluginID),
+		slog.String("target_backend_install_id", c.TargetBackendInstallID),
+		slog.String("standalone_http_listen", c.StandaloneHTTPListen),
+	)
+}
+
+// String implements fmt.Stringer with the same redaction.
+func (c Config) String() string { return c.LogValue().String() }
 
 type Server struct {
 	runtimedefault.Server
@@ -127,7 +153,13 @@ func (s *Server) Configure(_ context.Context, req *pluginv1.ConfigureRequest) (*
 func (s *Server) Snapshot() Config {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.cfg
+	c := s.cfg
+	// Deep-copy the json.RawMessage ([]byte) fields so a caller can't mutate
+	// the locked config's backing arrays while a concurrent Configure
+	// rewrites s.cfg.
+	c.KindleSMTPConfig = append(json.RawMessage(nil), s.cfg.KindleSMTPConfig...)
+	c.PathRemappings = append(json.RawMessage(nil), s.cfg.PathRemappings...)
+	return c
 }
 
 func stringFrom(v any) string {

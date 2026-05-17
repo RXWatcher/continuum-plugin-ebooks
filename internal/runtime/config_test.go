@@ -11,7 +11,7 @@ func TestIntFrom(t *testing.T) {
 		{float64(10), 10, true},
 		{int(4), 4, true},
 		{int64(7), 7, true},
-		{"10", 10, true},   // portal sometimes serializes numbers as strings
+		{"10", 10, true}, // portal sometimes serializes numbers as strings
 		{"  12 ", 12, true},
 		{"abc", 0, false},
 		{nil, 0, false},
