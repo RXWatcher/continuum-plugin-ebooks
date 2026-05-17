@@ -28,6 +28,8 @@ type SyncStats struct {
 // *BackendLibraryID == LibraryInfo.ID: matched -> update Name/MediaType only
 // (ID/Enabled/SortOrder preserved); unmatched backend lib -> create; managed
 // row with no backend lib -> prune (omitted). Pure & deterministic.
+// Assumes at most one managed row per backend library; a duplicate (only
+// possible via manual DB edits) is counted as Pruned.
 func Reconcile(existing []store.PortalLibrary, backendLibs []backend.LibraryInfo, backendID string) ([]store.PortalLibrary, SyncStats) {
 	var out []store.PortalLibrary
 	var st SyncStats
@@ -39,6 +41,14 @@ func Reconcile(existing []store.PortalLibrary, backendLibs []backend.LibraryInfo
 			maxSort = e.SortOrder
 		}
 		if e.BackendPluginID == backendID && e.BackendLibraryID != nil {
+			if _, dup := managed[*e.BackendLibraryID]; dup {
+				// Two existing rows map to the same backend library
+				// (only reachable via manual DB edits — no unique
+				// constraint). Full sync keeps one canonical row; the
+				// displaced duplicate is dropped from the desired set, so
+				// count it as Pruned rather than losing it silently.
+				st.Pruned++
+			}
 			managed[*e.BackendLibraryID] = e
 		} else {
 			out = append(out, e)

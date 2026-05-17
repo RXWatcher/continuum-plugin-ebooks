@@ -12,7 +12,7 @@ func i64(v int64) *int64 { return &v }
 func TestReconcile_CreateMissing(t *testing.T) {
 	out, st := Reconcile(nil,
 		[]backend.LibraryInfo{{ID: 5, Name: "Comics", MediaType: "comics"}}, "42")
-	if st.Created != 1 || st.Updated != 0 || st.Pruned != 0 {
+	if st.Created != 1 || st.Updated != 0 || st.Pruned != 0 || st.Kept != 0 {
 		t.Fatalf("stats=%+v", st)
 	}
 	if len(out) != 1 || out[0].ID != 0 || out[0].Name != "Comics" ||
@@ -96,5 +96,26 @@ func TestReconcile_Idempotent(t *testing.T) {
 	}
 	if len(out2) != 1 || out2[0].ID != 7 {
 		t.Fatalf("idempotent run changed rows: %+v", out2)
+	}
+}
+
+func TestReconcile_DuplicateManagedNotSilentlyDropped(t *testing.T) {
+	existing := []store.PortalLibrary{
+		{ID: 1, Name: "A", MediaType: "book", BackendPluginID: "42", BackendLibraryID: i64(5), Enabled: true, SortOrder: 0},
+		{ID: 2, Name: "B", MediaType: "book", BackendPluginID: "42", BackendLibraryID: i64(5), Enabled: true, SortOrder: 1},
+	}
+	out, st := Reconcile(existing, []backend.LibraryInfo{{ID: 5, Name: "Comics", MediaType: "comics"}}, "42")
+	if st.Pruned != 1 {
+		t.Fatalf("displaced duplicate must be counted as Pruned, stats=%+v", st)
+	}
+	// Exactly one canonical row for backend lib 5 survives.
+	n := 0
+	for _, l := range out {
+		if l.BackendLibraryID != nil && *l.BackendLibraryID == 5 {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Fatalf("want exactly 1 surviving row for backend lib 5, got %d (%+v)", n, out)
 	}
 }
