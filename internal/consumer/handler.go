@@ -5,6 +5,7 @@ package consumer
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	pluginv1 "github.com/ContinuumApp/continuum-plugin-sdk/pkg/pluginproto/continuum/plugin/v1"
@@ -69,8 +70,16 @@ func (h *Handler) HandleEvent(ctx context.Context, req *pluginv1.HandleEventRequ
 		return &pluginv1.HandleEventResponse{}, nil // unknown event; ack
 	}
 	if err != nil {
-		// Includes ErrNotFound (the request row may not be visible yet) and
-		// real DB errors — nack so the host redelivers rather than silently
+		if errors.Is(err, store.ErrNotFound) {
+			// The request_id is not ours: these backends are shared and also
+			// serve other portals/installs, whose request_ids never exist
+			// here. Nacking would redeliver this foreign event forever (a
+			// poison message that never drains). Ack-drop it. A rare genuine
+			// "row not committed yet" race self-heals because the backend's
+			// reconciler periodically re-emits the status.
+			return &pluginv1.HandleEventResponse{}, nil
+		}
+		// Real DB/transient error — nack so the host redelivers rather than
 		// losing a terminal status transition.
 		return nil, fmt.Errorf("handle %s: %w", leaf, err)
 	}
