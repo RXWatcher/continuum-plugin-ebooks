@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -445,9 +446,40 @@ func (s *Server) handleKosyncCreate(w http.ResponseWriter, r *http.Request) {
 	pwhex := hex.EncodeToString(pwsha1[:])
 	hash, err := bcrypt.GenerateFromPassword([]byte(pwhex), bcrypt.DefaultCost)
 	if err != nil {
-		writeErr(w, 500, err.Error())
+		slog.Error("kosync bcrypt", "err", err)
+		writeErr(w, 500, "internal error")
 		return
 	}
+
+	// This handler serves BOTH the public KOReader /kosync/users/create
+	// (access:"public" — the host injects NO identity, so id.UserID == "")
+	// and the authenticated /api/v1/me/kosync/register. When unauthenticated,
+	// the kosync account is standalone and MUST be keyed by its globally
+	// unique username, not the empty continuum id — otherwise every
+	// KOReader-registered user collapses to user_id="" and (a) shares/clobbers
+	// every other user's reading progress and (b) the owner-scoped upsert
+	// lets anyone overwrite an existing account's password (takeover).
+	if id.UserID == "" {
+		owner := "kosync:" + body.Username
+		if err := s.deps.Store.CreateKosyncUserStrict(r.Context(), store.KosyncUser{
+			UserID:             owner,
+			KosyncUsername:     body.Username,
+			KosyncPasswordHash: string(hash),
+		}); err != nil {
+			if errors.Is(err, store.ErrKosyncUsernameTaken) {
+				writeErr(w, 409, "kosync username already taken")
+				return
+			}
+			slog.Error("kosync create", "err", err)
+			writeErr(w, 500, "internal error")
+			return
+		}
+		writeJSON(w, 200, map[string]any{"username": body.Username})
+		return
+	}
+
+	// Authenticated path: the continuum user owns the account and may rotate
+	// their own password (owner-scoped DO UPDATE).
 	if err := s.deps.Store.UpsertKosyncUser(r.Context(), store.KosyncUser{
 		UserID:             id.UserID,
 		KosyncUsername:     body.Username,
@@ -457,7 +489,8 @@ func (s *Server) handleKosyncCreate(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, 409, "kosync username already taken")
 			return
 		}
-		writeErr(w, 500, err.Error())
+		slog.Error("kosync upsert", "err", err)
+		writeErr(w, 500, "internal error")
 		return
 	}
 	writeJSON(w, 200, map[string]any{"username": body.Username})

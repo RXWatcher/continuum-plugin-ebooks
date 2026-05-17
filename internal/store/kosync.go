@@ -56,6 +56,28 @@ func (s *Store) UpsertKosyncUser(ctx context.Context, u KosyncUser) error {
 	return nil
 }
 
+// CreateKosyncUserStrict inserts a new standalone kosync account and NEVER
+// updates an existing one. It is used by the public, unauthenticated KOReader
+// /kosync/users/create route: there is no continuum identity to authorize a
+// password change there, so a conflicting username must be rejected rather
+// than have its password silently overwritten by whoever POSTs next
+// (account takeover). Password rotation is only possible via the
+// authenticated /api/v1/me/kosync/register path (UpsertKosyncUser).
+func (s *Store) CreateKosyncUserStrict(ctx context.Context, u KosyncUser) error {
+	tag, err := s.pool.Exec(ctx, `
+		INSERT INTO kosync_user (user_id, kosync_username, kosync_password_hash)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (kosync_username) DO NOTHING
+	`, u.UserID, u.KosyncUsername, u.KosyncPasswordHash)
+	if err != nil {
+		return fmt.Errorf("create kosync_user: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrKosyncUsernameTaken
+	}
+	return nil
+}
+
 func (s *Store) GetKosyncUserByUsername(ctx context.Context, username string) (KosyncUser, error) {
 	row := s.pool.QueryRow(ctx, `
 		SELECT user_id, kosync_username, kosync_password_hash, created_at
