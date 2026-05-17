@@ -32,6 +32,8 @@
      "display_name": "Prune revoked OPDS tokens", "cron": "0 3 * * *"},
     {"type": "scheduled_task.v1", "id": "kindle_send_retrier",
      "display_name": "Retry queued Kindle sends", "cron": "*/2 * * * *"},
+    {"type": "scheduled_task.v1", "id": "portal_library_sync",
+     "display_name": "Sync presentation libraries from backend", "cron": "0 * * * *"},
     {"type": "request_router.v1", "id": "ebooks", "display_name": "Route ebook requests"}
   ],
   "http_routes": [
