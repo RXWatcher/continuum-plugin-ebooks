@@ -9,6 +9,10 @@ Install this plugin when you want a single reader-facing ebook experience that
 can sit in front of local libraries, BookWarehouse, or external download
 providers.
 
+## Detailed Operations Docs
+
+- [Setup, debugging, and communication flows](docs/setup-debug-flows.md)
+
 ## Features
 
 - Authenticated Ebooks web app for browsing, searching, requesting, and
