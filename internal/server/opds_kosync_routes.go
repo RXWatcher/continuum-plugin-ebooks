@@ -158,7 +158,7 @@ func (s *Server) handleOPDSCatalog(w http.ResponseWriter, r *http.Request) {
 		Sort: "added", Order: "desc", Limit: limit, Cursor: cursor,
 	})
 	if err != nil {
-		writeErr(w, 502, err.Error())
+		writeBadGateway(w, r, err)
 		return
 	}
 	feed := buildOPDSCatalogFeed(env, cfg.OpdsRealm, limit, time.Now())
@@ -190,7 +190,7 @@ func (s *Server) handleOPDSSearch(w http.ResponseWriter, r *http.Request) {
 	bk := backend.NewEbookBackend(s.deps.Host, cfg.BackendTarget())
 	env, err := bk.Search(r.Context(), q)
 	if err != nil {
-		writeErr(w, 502, err.Error())
+		writeBadGateway(w, r, err)
 		return
 	}
 	feed := opdsFeed{
@@ -231,7 +231,7 @@ func (s *Server) handleOPDSBookEntry(w http.ResponseWriter, r *http.Request) {
 	bk := backend.NewEbookBackend(s.deps.Host, cfg.BackendTarget())
 	d, err := bk.GetBook(r.Context(), chi.URLParam(r, "id"))
 	if err != nil {
-		writeErr(w, 502, err.Error())
+		writeBadGateway(w, r, err)
 		return
 	}
 	entry := opdsEntry{
@@ -266,7 +266,7 @@ func (s *Server) handleOPDSDownload(w http.ResponseWriter, r *http.Request) {
 	format := chi.URLParam(r, "format")
 	resp, err := s.deps.Host.GetStream(r.Context(), cfg.BackendTarget(), bk.FilePath(bookID, format), nil)
 	if err != nil {
-		writeErr(w, 502, err.Error())
+		writeBadGateway(w, r, err)
 		return
 	}
 	if resp.Body != nil {
@@ -389,20 +389,20 @@ func (s *Server) handleCreateOPDSToken(w http.ResponseWriter, r *http.Request) {
 	// Random JTI shown to user once; hash stored.
 	buf := make([]byte, 24)
 	if _, err := io.ReadFull(cryptoRand.Reader, buf); err != nil {
-		writeErr(w, 500, err.Error())
+		writeInternal(w, r, err)
 		return
 	}
 	jti := base64.URLEncoding.WithPadding(base64.NoPadding).EncodeToString(buf)
 	hash, err := bcrypt.GenerateFromPassword([]byte(jti), bcrypt.DefaultCost)
 	if err != nil {
-		writeErr(w, 500, err.Error())
+		writeInternal(w, r, err)
 		return
 	}
 	t := store.OPDSToken{
 		ID: ulid.Make().String(), UserID: id.UserID, JTI: jti, TokenHash: string(hash), Label: body.Label,
 	}
 	if err := s.deps.Store.InsertOPDSToken(r.Context(), t); err != nil {
-		writeErr(w, 500, err.Error())
+		writeInternal(w, r, err)
 		return
 	}
 	writeJSON(w, 201, map[string]any{"id": t.ID, "label": t.Label, "jti_shown_once": jti})
@@ -566,7 +566,7 @@ func (s *Server) handleKosyncPutProgress(w http.ResponseWriter, r *http.Request)
 		UserID: u.UserID, Document: body.Document, Progress: body.Progress,
 		Percentage: body.Percentage, Device: body.Device, DeviceID: body.DeviceID,
 	}); err != nil {
-		writeErr(w, 500, err.Error())
+		writeInternal(w, r, err)
 		return
 	}
 	writeJSON(w, 200, map[string]any{"document": body.Document})
@@ -630,7 +630,7 @@ func (s *Server) handleKoboServeFile(w http.ResponseWriter, r *http.Request) {
 	// constant-time compare deflates timing-distinguisher attacks across rows.
 	sessions, err := s.deps.Store.ListActiveKoboSessions(r.Context(), time.Now())
 	if err != nil {
-		writeErr(w, 500, err.Error())
+		writeInternal(w, r, err)
 		return
 	}
 	sess, matched := findKoboSessionForCode(sessions, code)

@@ -44,14 +44,14 @@ func (s *Server) handleAdminListRequests(w http.ResponseWriter, r *http.Request)
 		var err error
 		rows, err = s.deps.Store.ListRequestsByStatus(r.Context(), status, 200)
 		if err != nil {
-			writeErr(w, 500, err.Error())
+			writeInternal(w, r, err)
 			return
 		}
 	} else {
 		var err error
 		rows, err = s.deps.Store.ListNonTerminal(r.Context(), 200)
 		if err != nil {
-			writeErr(w, 500, err.Error())
+			writeInternal(w, r, err)
 			return
 		}
 	}
@@ -189,7 +189,7 @@ func (s *Server) handleAdminProviderHealth(w http.ResponseWriter, r *http.Reques
 func (s *Server) handleAdminListRoutingRules(w http.ResponseWriter, r *http.Request) {
 	rules, err := s.deps.Store.ListRequestRoutingRules(r.Context(), false)
 	if err != nil {
-		writeErr(w, 500, err.Error())
+		writeInternal(w, r, err)
 		return
 	}
 	writeItems(w, 200, rules)
@@ -268,7 +268,7 @@ func (s *Server) handleAdminPatchBackend(w http.ResponseWriter, r *http.Request)
 		cur.KepubifyPath = *body.KepubifyPath
 	}
 	if err := s.deps.Store.UpsertConfig(r.Context(), cur); err != nil {
-		writeErr(w, 500, err.Error())
+		writeInternal(w, r, err)
 		return
 	}
 	writeJSON(w, 200, map[string]any{"ok": true})
@@ -277,7 +277,7 @@ func (s *Server) handleAdminPatchBackend(w http.ResponseWriter, r *http.Request)
 func (s *Server) handleAdminListLibraries(w http.ResponseWriter, r *http.Request) {
 	libs, err := s.deps.Store.ListPortalLibraries(r.Context(), false)
 	if err != nil {
-		writeErr(w, 500, err.Error())
+		writeInternal(w, r, err)
 		return
 	}
 	writeItems(w, 200, libs)
@@ -377,7 +377,7 @@ func (s *Server) handleAdminSyncLibraries(w http.ResponseWriter, r *http.Request
 	stats, err := libsync.Sync(r.Context(), s.deps.Store,
 		backend.NewEbookBackend(s.deps.Host, backendID), backendID)
 	if err != nil {
-		writeErr(w, 502, err.Error())
+		writeBadGateway(w, r, err)
 		return
 	}
 	writeJSON(w, 200, map[string]any{

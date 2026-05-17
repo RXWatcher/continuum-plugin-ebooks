@@ -49,7 +49,7 @@ func (s *Server) handleSendToKindle(w http.ResponseWriter, r *http.Request) {
 		Format: body.Format, ToAddress: toAddr, Status: "queued",
 	}
 	if err := s.deps.Store.InsertKindleSend(r.Context(), entry); err != nil {
-		writeErr(w, 500, err.Error())
+		writeInternal(w, r, err)
 		return
 	}
 	writeJSON(w, 202, entry)
@@ -74,7 +74,7 @@ func (s *Server) handleSendToKobo(w http.ResponseWriter, r *http.Request) {
 	bk := backend.NewEbookBackend(s.deps.Host, lib.BackendPluginID)
 	resp, err := s.deps.Host.GetStream(r.Context(), lib.BackendPluginID, bk.FilePath(bookID, "epub"), nil)
 	if err != nil {
-		writeErr(w, 502, err.Error())
+		writeBadGateway(w, r, err)
 		return
 	}
 	defer resp.Body.Close()
@@ -89,14 +89,14 @@ func (s *Server) handleSendToKobo(w http.ResponseWriter, r *http.Request) {
 	tmpEpub := filepath.Join(dir, fmt.Sprintf("kobo-%s.epub", ulid.Make().String()))
 	f, err := os.Create(tmpEpub)
 	if err != nil {
-		writeErr(w, 500, err.Error())
+		writeInternal(w, r, err)
 		return
 	}
 	_, err = io.Copy(f, resp.Body)
 	_ = f.Close()
 	if err != nil {
 		_ = os.Remove(tmpEpub)
-		writeErr(w, 500, err.Error())
+		writeInternal(w, r, err)
 		return
 	}
 	// Convert via kepubify.
@@ -118,7 +118,7 @@ func (s *Server) handleSendToKobo(w http.ResponseWriter, r *http.Request) {
 	code, err := randCode(10)
 	if err != nil {
 		_ = os.Remove(kepubPath) // converted file is orphaned otherwise (no DB row → reaper never sees it)
-		writeErr(w, 500, err.Error())
+		writeInternal(w, r, err)
 		return
 	}
 	// Bcrypt-hash the URL-supplied code. The plaintext code is shown to the
@@ -129,7 +129,7 @@ func (s *Server) handleSendToKobo(w http.ResponseWriter, r *http.Request) {
 	codeHash, err := bcrypt.GenerateFromPassword([]byte(code), bcrypt.DefaultCost)
 	if err != nil {
 		_ = os.Remove(kepubPath)
-		writeErr(w, 500, err.Error())
+		writeInternal(w, r, err)
 		return
 	}
 	session := store.KoboSession{
@@ -144,7 +144,7 @@ func (s *Server) handleSendToKobo(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := s.deps.Store.InsertKoboSession(r.Context(), session); err != nil {
 		_ = os.Remove(kepubPath)
-		writeErr(w, 500, err.Error())
+		writeInternal(w, r, err)
 		return
 	}
 	writeJSON(w, 200, map[string]any{

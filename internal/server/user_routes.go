@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
@@ -88,6 +89,25 @@ func writeItems[T any](w http.ResponseWriter, code int, items []T) {
 
 func writeErr(w http.ResponseWriter, code int, msg string) {
 	writeJSON(w, code, map[string]any{"error": map[string]any{"message": msg}})
+}
+
+// writeInternal handles an unexpected store/internal error. The underlying
+// error can carry SQL text, schema names, the DSN host, or internal paths,
+// so it is logged server-side (with method+path) and only an opaque 500 is
+// returned — important because /opds, /kosync and /kobo are public routes.
+func writeInternal(w http.ResponseWriter, r *http.Request, err error) {
+	slog.Error("ebooks-portal internal error",
+		"method", r.Method, "path", r.URL.Path, "err", err)
+	writeErr(w, http.StatusInternalServerError, "internal error")
+}
+
+// writeBadGateway handles an upstream/backend failure. The wrapped error can
+// embed the full upstream response body and host-proxy URL; log it, return a
+// generic message.
+func writeBadGateway(w http.ResponseWriter, r *http.Request, err error) {
+	slog.Error("ebooks-portal backend error",
+		"method", r.Method, "path", r.URL.Path, "err", err)
+	writeErr(w, http.StatusBadGateway, "backend unavailable")
 }
 
 func (s *Server) targetBackend(r *http.Request) (*backend.EbookBackend, error) {
@@ -190,7 +210,7 @@ func (s *Server) handleLibrary(w http.ResponseWriter, r *http.Request) {
 	status := r.URL.Query().Get("status")
 	rows, err := s.deps.Store.ListByUser(r.Context(), id.UserID, status, 100)
 	if err != nil {
-		writeErr(w, 500, err.Error())
+		writeInternal(w, r, err)
 		return
 	}
 	writeItems(w, 200, rows)
@@ -200,7 +220,7 @@ func (s *Server) handleRecentProgress(w http.ResponseWriter, r *http.Request) {
 	id, _ := auth.FromContext(r.Context())
 	rows, err := s.deps.Store.ListRecentByUser(r.Context(), id.UserID, 20)
 	if err != nil {
-		writeErr(w, 500, err.Error())
+		writeInternal(w, r, err)
 		return
 	}
 	writeItems(w, 200, rows)
@@ -215,7 +235,7 @@ func (s *Server) handleGetBookUserData(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, 200, store.UserData{UserID: id.UserID, BookID: bookID})
 			return
 		}
-		writeErr(w, 500, err.Error())
+		writeInternal(w, r, err)
 		return
 	}
 	writeJSON(w, 200, row)
@@ -249,7 +269,7 @@ func (s *Server) handleUpdateProgress(w http.ResponseWriter, r *http.Request) {
 	cur.IsFinished = body.IsFinished
 	cur.LastReadAt = &now
 	if err := s.deps.Store.UpsertUserData(r.Context(), cur); err != nil {
-		writeErr(w, 500, err.Error())
+		writeInternal(w, r, err)
 		return
 	}
 	writeJSON(w, 200, map[string]any{"ok": true})
@@ -280,7 +300,7 @@ func (s *Server) handleUpdateBookMeta(w http.ResponseWriter, r *http.Request) {
 		cur.Notes = *body.Notes
 	}
 	if err := s.deps.Store.UpsertUserData(r.Context(), cur); err != nil {
-		writeErr(w, 500, err.Error())
+		writeInternal(w, r, err)
 		return
 	}
 	writeJSON(w, 200, map[string]any{"ok": true})
@@ -348,7 +368,7 @@ func (s *Server) cacheStream(w http.ResponseWriter, r *http.Request, installID, 
 	}
 	entry, err := m.StartOrJoin(r.Context(), key, bookID, format, fetch)
 	if err != nil {
-		writeErr(w, 502, err.Error())
+		writeBadGateway(w, r, err)
 		return
 	}
 	release := m.Acquire(entry.ID)
@@ -391,7 +411,7 @@ func (s *Server) handleCreateAnnotation(w http.ResponseWriter, r *http.Request) 
 		SelectedText: body.SelectedText, NoteText: body.NoteText,
 	}
 	if err := s.deps.Store.InsertAnnotation(r.Context(), ann); err != nil {
-		writeErr(w, 500, err.Error())
+		writeInternal(w, r, err)
 		return
 	}
 	writeJSON(w, 201, ann)
@@ -452,7 +472,7 @@ func (s *Server) handleListCatalog(w http.ResponseWriter, r *http.Request) {
 		}
 		env, err := backend.NewEbookBackend(s.deps.Host, lib.BackendPluginID).ListCatalog(r.Context(), queryFor(lib, limit))
 		if err != nil {
-			writeErr(w, 502, err.Error())
+			writeBadGateway(w, r, err)
 			return
 		}
 		writeJSON(w, 200, wrapCatalogItems(env, lib))
@@ -496,7 +516,7 @@ func (s *Server) handleListCatalog(w http.ResponseWriter, r *http.Request) {
 	}
 	combined, err := combineCatalogResults(results, 0)
 	if err != nil {
-		writeErr(w, 502, err.Error())
+		writeBadGateway(w, r, err)
 		return
 	}
 	combined.NextCursor = encodeCatalogCursor(nextCursors)
@@ -512,7 +532,7 @@ func (s *Server) handleGetBook(w http.ResponseWriter, r *http.Request) {
 	}
 	d, err := backend.NewEbookBackend(s.deps.Host, lib.BackendPluginID).GetBook(r.Context(), backendID)
 	if err != nil {
-		writeErr(w, 502, err.Error())
+		writeBadGateway(w, r, err)
 		return
 	}
 	d.ID = encodeBookRef(lib.ID, d.ID)
@@ -532,7 +552,7 @@ func (s *Server) handleSearchCatalog(w http.ResponseWriter, r *http.Request) {
 		}
 		env, err := backend.NewEbookBackend(s.deps.Host, lib.BackendPluginID).Search(r.Context(), query)
 		if err != nil {
-			writeErr(w, 502, err.Error())
+			writeBadGateway(w, r, err)
 			return
 		}
 		writeJSON(w, 200, wrapCatalogItems(env, lib))
@@ -554,7 +574,7 @@ func (s *Server) handleSearchCatalog(w http.ResponseWriter, r *http.Request) {
 	}
 	combined, err := combineCatalogResults(results, 0)
 	if err != nil {
-		writeErr(w, 502, err.Error())
+		writeBadGateway(w, r, err)
 		return
 	}
 	writeJSON(w, 200, combined)
@@ -590,7 +610,7 @@ func queryLibraryID(r *http.Request) int64 {
 func (s *Server) handleListLibraries(w http.ResponseWriter, r *http.Request) {
 	items, err := s.deps.Store.ListPortalLibraries(r.Context(), true)
 	if err != nil {
-		writeErr(w, 500, err.Error())
+		writeInternal(w, r, err)
 		return
 	}
 	writeItems(w, 200, items)
@@ -604,7 +624,7 @@ func (s *Server) handleBrowseAuthors(w http.ResponseWriter, r *http.Request) {
 	}
 	env, err := backend.NewEbookBackend(s.deps.Host, lib.BackendPluginID).BrowseAuthors(r.Context(), r.URL.Query().Get("cursor"), browseQueryLimit(r), backendLibraryID(lib))
 	if err != nil {
-		writeErr(w, 502, err.Error())
+		writeBadGateway(w, r, err)
 		return
 	}
 	writeJSON(w, 200, env)
@@ -618,7 +638,7 @@ func (s *Server) handleBrowseSeries(w http.ResponseWriter, r *http.Request) {
 	}
 	env, err := backend.NewEbookBackend(s.deps.Host, lib.BackendPluginID).BrowseSeries(r.Context(), r.URL.Query().Get("cursor"), browseQueryLimit(r), backendLibraryID(lib))
 	if err != nil {
-		writeErr(w, 502, err.Error())
+		writeBadGateway(w, r, err)
 		return
 	}
 	writeJSON(w, 200, env)
@@ -632,7 +652,7 @@ func (s *Server) handleBrowseGenres(w http.ResponseWriter, r *http.Request) {
 	}
 	env, err := backend.NewEbookBackend(s.deps.Host, lib.BackendPluginID).BrowseGenres(r.Context(), r.URL.Query().Get("cursor"), browseQueryLimit(r), backendLibraryID(lib))
 	if err != nil {
-		writeErr(w, 502, err.Error())
+		writeBadGateway(w, r, err)
 		return
 	}
 	writeJSON(w, 200, env)
@@ -707,7 +727,7 @@ func (s *Server) handleCreateRequest(w http.ResponseWriter, r *http.Request) {
 		TargetPluginID: targetPluginID, AutoMonitor: body.AutoMonitor,
 	}
 	if err := s.deps.Store.InsertRequest(r.Context(), reqRow); err != nil {
-		writeErr(w, 500, err.Error())
+		writeInternal(w, r, err)
 		return
 	}
 	// If auto-approve is on, immediately submit to backend via broadcast event.
@@ -806,7 +826,7 @@ func (s *Server) handleCreateCollection(w http.ResponseWriter, r *http.Request) 
 		Color: body.Color, IsPublic: body.IsPublic, IsPinned: body.IsPinned,
 	}
 	if err := s.deps.Store.CreateCollection(r.Context(), c); err != nil {
-		writeErr(w, 500, err.Error())
+		writeInternal(w, r, err)
 		return
 	}
 	writeJSON(w, 201, c)
@@ -857,7 +877,7 @@ func (s *Server) handleListCollectionItems(w http.ResponseWriter, r *http.Reques
 	cid := chi.URLParam(r, "id")
 	items, err := s.deps.Store.ListItemsForUser(r.Context(), id.UserID, cid)
 	if err != nil {
-		writeErr(w, 500, err.Error())
+		writeInternal(w, r, err)
 		return
 	}
 	writeItems(w, 200, items)
