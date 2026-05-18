@@ -37,6 +37,13 @@ export default function App() {
             element={
               <main className="min-h-[100dvh] bg-background text-foreground">
                 <div className="mx-auto max-w-[1600px] space-y-6 px-4 py-6 md:px-6 lg:px-8">
+                  <a
+                    href="/admin/plugins"
+                    className="text-muted-foreground hover:bg-surface-hover hover:text-foreground inline-flex min-h-9 items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors"
+                    title="Back to Continuum plugins"
+                  >
+                    Back to Continuum plugins
+                  </a>
                   <Admin />
                 </div>
               </main>
