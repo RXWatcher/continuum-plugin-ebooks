@@ -1,4 +1,4 @@
-import { Outlet, NavLink, Link } from 'react-router';
+import { Outlet, NavLink, Link, useLocation } from 'react-router';
 import {
   ArrowLeft,
   Compass,
@@ -15,10 +15,12 @@ import { cn } from '@/lib/utils';
 import { currentUser } from '@/lib/identity';
 import SearchBar from './SearchBar';
 
-const continuumHomeHref = '/';
-
 export default function Layout() {
+  const loc = useLocation();
   const user = currentUser();
+  const isAdminRoute = loc.pathname.startsWith('/admin');
+  const continuumHomeHref = isAdminRoute ? '/admin/plugins' : '/';
+  const continuumHomeTitle = isAdminRoute ? 'Back to Continuum plugins' : 'Back to Continuum';
   return (
     <div className="bg-background relative min-h-[100dvh] overflow-x-hidden text-foreground">
       <div className="from-primary/6 pointer-events-none fixed inset-x-0 top-0 z-0 h-48 bg-gradient-to-b to-transparent blur-3xl" />
@@ -27,7 +29,7 @@ export default function Layout() {
           <a
             href={continuumHomeHref}
             className="text-muted-foreground hover:bg-surface-hover hover:text-foreground inline-flex min-h-9 min-w-9 items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors"
-            title="Back to Continuum"
+            title={continuumHomeTitle}
           >
             <ArrowLeft className="size-4" />
             <span className="hidden sm:inline">Continuum</span>
