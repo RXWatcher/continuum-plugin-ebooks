@@ -10,8 +10,10 @@ import {
 } from "@/lib/api";
 import { BookCard } from "@/components/BookCard";
 import { Skeleton } from "@/components/ui/skeleton";
+import { currentUser } from "@/lib/identity";
 
 export default function Home() {
+  const user = currentUser();
   const recent = useQuery({
     queryKey: ["catalog", "recent"],
     queryFn: () => listCatalog("", "added", "desc", 24),
@@ -134,7 +136,7 @@ export default function Home() {
             ))}
           </div>
         ) : (
-          <EmptyState />
+          <EmptyState isAdmin={!!user?.is_admin} />
         )}
       </section>
     </div>
@@ -163,12 +165,34 @@ function DashboardLink({
   );
 }
 
-function EmptyState() {
+function EmptyState({ isAdmin }: { isAdmin: boolean }) {
   return (
-    <div className="rounded-lg border border-dashed border-border p-12 text-center">
-      <p className="text-sm text-muted-foreground">
-        No ebooks yet — connect a backend in the admin panel to get started.
+    <div className="rounded-lg border border-dashed border-border bg-card/40 p-8 text-center">
+      <h3 className="text-base font-semibold">No ebooks are available yet</h3>
+      <p className="mx-auto mt-2 max-w-xl text-sm text-muted-foreground">
+        The portal is running, but it does not have a reachable catalog source
+        with books to show.
       </p>
+      {isAdmin ? (
+        <div className="mt-4 flex flex-wrap justify-center gap-2">
+          <Link
+            to="/admin"
+            className="inline-flex min-h-9 items-center rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground"
+          >
+            Configure backend
+          </Link>
+          <Link
+            to="/library"
+            className="inline-flex min-h-9 items-center rounded-md border border-border px-3 text-sm font-medium"
+          >
+            Check libraries
+          </Link>
+        </div>
+      ) : (
+        <p className="mt-4 text-xs text-muted-foreground">
+          Ask an administrator to connect an ebook backend or run a library scan.
+        </p>
+      )}
     </div>
   );
 }
