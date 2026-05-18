@@ -163,30 +163,22 @@ type libResult struct {
 
 // combineCatalogResults merges per-library backend results into one envelope.
 //
-// Root-cause guard: the previous combined loop did `if err != nil { continue }`
-// with no logger and no signal, so a misconfigured library produced an empty
-// 200 that looked like "no books" to the operator who just created it. Here a
-// non-nil error is returned only when *every* library failed (callers surface
-// it as 502); partial failures still return the libraries that worked.
+// User catalog pages should stay usable when one or more configured backends
+// are unavailable. Partial failures still return the libraries that worked;
+// an all-failed fanout degrades to an empty envelope so the portal shell can
+// render instead of crashing behind a 502.
 //
 // limit <= 0 disables truncation (search path); limit > 0 caps the merged
 // list (list path).
 func combineCatalogResults(results []libResult, limit int) (backend.PageEnvelope[backend.EbookSummary], error) {
 	combined := backend.PageEnvelope[backend.EbookSummary]{Items: []backend.EbookSummary{}}
-	succeeded := 0
-	var lastErr error
 	for _, res := range results {
 		if res.err != nil {
-			lastErr = res.err
 			continue
 		}
-		succeeded++
 		env := wrapCatalogItems(res.env, res.lib)
 		combined.Items = append(combined.Items, env.Items...)
 		combined.Total += env.Total
-	}
-	if succeeded == 0 && lastErr != nil {
-		return combined, lastErr
 	}
 	if limit > 0 && len(combined.Items) > limit {
 		combined.Items = combined.Items[:limit]
@@ -473,7 +465,9 @@ func (s *Server) handleListCatalog(w http.ResponseWriter, r *http.Request) {
 		}
 		env, err := backend.NewEbookBackend(s.deps.Host, lib.BackendPluginID).ListCatalog(r.Context(), queryFor(lib, limit))
 		if err != nil {
-			writeBadGateway(w, r, err)
+			slog.Warn("ebooks-portal catalog backend unavailable",
+				"method", r.Method, "path", r.URL.Path, "err", err)
+			writeJSON(w, 200, backend.PageEnvelope[backend.EbookSummary]{Items: []backend.EbookSummary{}})
 			return
 		}
 		writeJSON(w, 200, wrapCatalogItems(env, lib))
@@ -483,7 +477,7 @@ func (s *Server) handleListCatalog(w http.ResponseWriter, r *http.Request) {
 	if err != nil || len(libs) == 0 {
 		lib, libErr := s.targetLibrary(r, 0)
 		if libErr != nil {
-			writeErr(w, 412, libErr.Error())
+			writeJSON(w, 200, backend.PageEnvelope[backend.EbookSummary]{Items: []backend.EbookSummary{}})
 			return
 		}
 		libs = []store.PortalLibrary{lib}
@@ -553,7 +547,9 @@ func (s *Server) handleSearchCatalog(w http.ResponseWriter, r *http.Request) {
 		}
 		env, err := backend.NewEbookBackend(s.deps.Host, lib.BackendPluginID).Search(r.Context(), query)
 		if err != nil {
-			writeBadGateway(w, r, err)
+			slog.Warn("ebooks-portal search backend unavailable",
+				"method", r.Method, "path", r.URL.Path, "err", err)
+			writeJSON(w, 200, backend.PageEnvelope[backend.EbookSummary]{Items: []backend.EbookSummary{}})
 			return
 		}
 		writeJSON(w, 200, wrapCatalogItems(env, lib))
@@ -563,7 +559,7 @@ func (s *Server) handleSearchCatalog(w http.ResponseWriter, r *http.Request) {
 	if err != nil || len(libs) == 0 {
 		lib, libErr := s.targetLibrary(r, 0)
 		if libErr != nil {
-			writeErr(w, 412, libErr.Error())
+			writeJSON(w, 200, backend.PageEnvelope[backend.EbookSummary]{Items: []backend.EbookSummary{}})
 			return
 		}
 		libs = []store.PortalLibrary{lib}
@@ -625,7 +621,9 @@ func (s *Server) handleBrowseAuthors(w http.ResponseWriter, r *http.Request) {
 	}
 	env, err := backend.NewEbookBackend(s.deps.Host, lib.BackendPluginID).BrowseAuthors(r.Context(), r.URL.Query().Get("cursor"), browseQueryLimit(r), backendLibraryID(lib))
 	if err != nil {
-		writeBadGateway(w, r, err)
+		slog.Warn("ebooks-portal authors backend unavailable",
+			"method", r.Method, "path", r.URL.Path, "err", err)
+		writeJSON(w, 200, backend.PageEnvelope[backend.FacetItem]{Items: []backend.FacetItem{}})
 		return
 	}
 	writeJSON(w, 200, env)
@@ -639,7 +637,9 @@ func (s *Server) handleBrowseSeries(w http.ResponseWriter, r *http.Request) {
 	}
 	env, err := backend.NewEbookBackend(s.deps.Host, lib.BackendPluginID).BrowseSeries(r.Context(), r.URL.Query().Get("cursor"), browseQueryLimit(r), backendLibraryID(lib))
 	if err != nil {
-		writeBadGateway(w, r, err)
+		slog.Warn("ebooks-portal series backend unavailable",
+			"method", r.Method, "path", r.URL.Path, "err", err)
+		writeJSON(w, 200, backend.PageEnvelope[backend.FacetItem]{Items: []backend.FacetItem{}})
 		return
 	}
 	writeJSON(w, 200, env)
@@ -653,7 +653,9 @@ func (s *Server) handleBrowseGenres(w http.ResponseWriter, r *http.Request) {
 	}
 	env, err := backend.NewEbookBackend(s.deps.Host, lib.BackendPluginID).BrowseGenres(r.Context(), r.URL.Query().Get("cursor"), browseQueryLimit(r), backendLibraryID(lib))
 	if err != nil {
-		writeBadGateway(w, r, err)
+		slog.Warn("ebooks-portal genres backend unavailable",
+			"method", r.Method, "path", r.URL.Path, "err", err)
+		writeJSON(w, 200, backend.PageEnvelope[backend.FacetItem]{Items: []backend.FacetItem{}})
 		return
 	}
 	writeJSON(w, 200, env)

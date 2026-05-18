@@ -16,18 +16,20 @@ func sumEnv(ids ...string) backend.PageEnvelope[backend.EbookSummary] {
 	return backend.PageEnvelope[backend.EbookSummary]{Items: items}
 }
 
-// TestCombineCatalogResults_AllFailSurfacesError guards the silent-failure
-// root cause: when every configured library's backend errors, the portal
-// must return the error, not a misleading empty 200 that looks like "no
-// books" to the user who just created the libraries.
-func TestCombineCatalogResults_AllFailSurfacesError(t *testing.T) {
+// TestCombineCatalogResults_AllFailDegradesEmpty guards the user portal
+// shell: when every configured library's backend errors, the landing page
+// should still render with an empty catalog state instead of a hard 502.
+func TestCombineCatalogResults_AllFailDegradesEmpty(t *testing.T) {
 	boom := errors.New("upstream 502")
-	_, err := combineCatalogResults([]libResult{
+	env, err := combineCatalogResults([]libResult{
 		{lib: store.PortalLibrary{ID: 1}, err: boom},
 		{lib: store.PortalLibrary{ID: 2}, err: boom},
 	}, 50)
-	if err == nil {
-		t.Fatal("all libraries failed but combineCatalogResults returned nil error")
+	if err != nil {
+		t.Fatalf("all libraries failed but combineCatalogResults returned error: %v", err)
+	}
+	if len(env.Items) != 0 {
+		t.Fatalf("want empty catalog when all libraries fail, got %d items", len(env.Items))
 	}
 }
 

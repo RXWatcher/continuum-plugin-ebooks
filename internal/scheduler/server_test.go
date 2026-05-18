@@ -48,3 +48,17 @@ func TestRun_UnknownKeyStillErrors(t *testing.T) {
 		t.Fatalf("unknown key must still error; got %v", err)
 	}
 }
+
+func TestIsPluginHTTPUnsupported(t *testing.T) {
+	err := assertErr("fetch backend libraries: rpc error: code = Unimplemented desc = method CallPluginHTTP not implemented")
+	if !isPluginHTTPUnsupported(err) {
+		t.Fatal("expected CallPluginHTTP unimplemented error to be treated as unsupported backend")
+	}
+	if isPluginHTTPUnsupported(assertErr("fetch backend libraries: connection refused")) {
+		t.Fatal("ordinary backend errors must still surface")
+	}
+}
+
+type assertErr string
+
+func (e assertErr) Error() string { return string(e) }

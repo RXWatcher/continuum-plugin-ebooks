@@ -368,8 +368,21 @@ func (t *Tasks) PortalLibrarySync(ctx context.Context) error {
 	target := cfg.BackendTarget()
 	if _, err := libsync.Sync(ctx, t.Store,
 		backend.NewEbookBackend(t.Host, target), target); err != nil {
+		if isPluginHTTPUnsupported(err) {
+			t.Log.Info("portal_library_sync skipped: backend does not expose plugin HTTP", "backend", target)
+			return nil
+		}
 		t.Log.Warn("portal_library_sync", "err", err)
 		return err
 	}
 	return nil
+}
+
+func isPluginHTTPUnsupported(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "code = Unimplemented") &&
+		strings.Contains(msg, "CallPluginHTTP")
 }
