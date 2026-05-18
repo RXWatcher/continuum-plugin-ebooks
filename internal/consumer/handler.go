@@ -25,6 +25,9 @@ type Handler struct {
 func New(depsFn func() *Deps) *Handler { return &Handler{depsFn: depsFn} }
 
 func (h *Handler) HandleEvent(ctx context.Context, req *pluginv1.HandleEventRequest) (*pluginv1.HandleEventResponse, error) {
+	if h.depsFn == nil {
+		return nil, fmt.Errorf("plugin not configured yet")
+	}
 	d := h.depsFn()
 	if d == nil {
 		// Capability servers serve before Configure runs. Nack so the host

@@ -70,3 +70,21 @@ func TestHandleEvent_ForeignRequestIDAcked(t *testing.T) {
 		t.Fatal("nil response")
 	}
 }
+
+func TestHandleEvent_NilDepsFnNacks(t *testing.T) {
+	h := New(nil)
+	payload, _ := structpb.NewStruct(map[string]any{
+		"request_id":  "r-1",
+		"external_id": "ext-1",
+	})
+	resp, err := h.HandleEvent(context.Background(), &pluginv1.HandleEventRequest{
+		EventName: "plugin.continuum.bookwarehouse-ebook.request_acknowledged",
+		Payload:   payload,
+	})
+	if err == nil {
+		t.Fatal("nil depsFn must return an error so the host redelivers")
+	}
+	if resp != nil {
+		t.Fatalf("response = %+v, want nil on nack", resp)
+	}
+}

@@ -112,7 +112,7 @@ export default function Home() {
           </h2>
           <Link
             to="/library"
-            className="text-xs text-muted-foreground hover:text-foreground"
+            className="inline-flex min-h-9 items-center text-xs text-muted-foreground hover:text-foreground"
           >
             View library →
           </Link>

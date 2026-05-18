@@ -4,6 +4,7 @@
 package server
 
 import (
+	"context"
 	"net/http"
 	"strings"
 
@@ -21,7 +22,7 @@ import (
 type Deps struct {
 	Store        *store.Store
 	Host         *backend.HostHTTPClient
-	Ev           *event.Publisher
+	Ev           EventPublisher
 	CacheDir     string
 	CacheManager *streaming.Manager
 	// KoboRefs is the shared registry used by handleKoboServeFile and the
@@ -30,6 +31,17 @@ type Deps struct {
 	KoboRefs *koboref.Registry
 	WebFS    http.FileSystem
 }
+
+type EventPublisher interface {
+	Publish(ctx context.Context, name string, payload map[string]any)
+}
+
+type TargetedEventPublisher interface {
+	EventPublisher
+	PublishTo(ctx context.Context, targetPluginID, name string, payload map[string]any)
+}
+
+var _ EventPublisher = (*event.Publisher)(nil)
 
 type Server struct {
 	deps        Deps

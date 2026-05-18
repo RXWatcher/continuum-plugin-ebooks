@@ -103,9 +103,15 @@ func (s *Server) handleAdminPatchRequest(w http.ResponseWriter, r *http.Request)
 	}
 	switch body.Action {
 	case "approve":
-		s.submitRequest(r.Context(), cur)
+		if err := s.submitRequest(r.Context(), cur); err != nil {
+			writeInternal(w, r, err)
+			return
+		}
 	case "retry":
-		s.submitRequest(r.Context(), cur)
+		if err := s.submitRequest(r.Context(), cur); err != nil {
+			writeInternal(w, r, err)
+			return
+		}
 	case "deny":
 		_ = s.deps.Store.UpdateRequestStatus(r.Context(), reqID, "denied", "", body.DeniedReason, "", "")
 	case "fulfill_manual":
@@ -117,23 +123,12 @@ func (s *Server) handleAdminPatchRequest(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, 200, map[string]any{"ok": true})
 }
 
-func (s *Server) submitRequest(ctx context.Context, cur store.Request) {
-	_ = s.deps.Store.UpdateRequestStatus(ctx, cur.ID, "submitted", "", "", "", "")
-	if s.deps.Ev != nil {
-		s.deps.Ev.Publish(ctx, "request_submitted", map[string]any{
-			"request_id":                cur.ID,
-			"requestId":                 cur.ID,
-			"target_plugin_id":          cur.TargetPluginID,
-			"target_provider_plugin_id": cur.TargetPluginID,
-			"title":                     cur.Title,
-			"authors":                   cur.Authors,
-			"isbn":                      cur.ISBN,
-			"source_id":                 cur.SourceID,
-			"format_pref":               cur.FormatPref,
-			"media_type":                cur.MediaType,
-			"auto_monitor":              cur.AutoMonitor,
-		})
+func (s *Server) submitRequest(ctx context.Context, cur store.Request) error {
+	if err := s.deps.Store.UpdateRequestStatus(ctx, cur.ID, "submitted", "", "", "", ""); err != nil {
+		return err
 	}
+	publishRequestSubmitted(ctx, s.deps.Ev, cur)
+	return nil
 }
 
 func (s *Server) handleAdminBulkRequests(w http.ResponseWriter, r *http.Request) {

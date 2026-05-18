@@ -1,9 +1,10 @@
 BINARY := continuum-plugin-ebooks
 GO ?= go
+PNPM ?= pnpm
 
 .PHONY: build test clean
 build:
-	cd web && pnpm install --frozen-lockfile && pnpm run build && cd ..
+	cd web && $(PNPM) install --frozen-lockfile && $(PNPM) run build
 	$(GO) build -o $(BINARY) ./cmd/continuum-plugin-ebooks
 test:
 	$(GO) test ./...

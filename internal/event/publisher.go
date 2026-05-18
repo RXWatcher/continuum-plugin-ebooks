@@ -30,3 +30,13 @@ func (p *Publisher) Publish(ctx context.Context, name string, payload map[string
 		p.logger.Warn("publish event", "name", name, "err", err)
 	}
 }
+
+func (p *Publisher) PublishTo(ctx context.Context, targetPluginID, name string, payload map[string]any) {
+	if p.host == nil {
+		p.logger.Warn("host not bound; skipping targeted event", "target_plugin_id", targetPluginID, "name", name)
+		return
+	}
+	if err := p.host.PublishEventTo(ctx, targetPluginID, name, payload); err != nil {
+		p.logger.Warn("publish targeted event", "target_plugin_id", targetPluginID, "name", name, "err", err)
+	}
+}

@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -701,7 +702,7 @@ func (s *Server) handleCreateRequest(w http.ResponseWriter, r *http.Request) {
 		body.MediaType = "book"
 	}
 	body.MediaType = normalizeMediaType(body.MediaType)
-	targetPluginID := body.TargetPluginID
+	targetPluginID := strings.TrimSpace(body.TargetPluginID)
 	if targetPluginID == "" {
 		if rule, err := s.deps.Store.ResolveRequestRoutingRule(r.Context(), body.MediaType); err == nil {
 			targetPluginID = rule.TargetPluginID
@@ -730,26 +731,41 @@ func (s *Server) handleCreateRequest(w http.ResponseWriter, r *http.Request) {
 		writeInternal(w, r, err)
 		return
 	}
-	// If auto-approve is on, immediately submit to backend via broadcast event.
+	// If auto-approve is on, immediately submit to backend.
 	if cfg.AutoApproveRequests {
-		_ = s.deps.Store.UpdateRequestStatus(r.Context(), reqRow.ID, "submitted", "", "", "", "")
-		if s.deps.Ev != nil {
-			s.deps.Ev.Publish(r.Context(), "request_submitted", map[string]any{
-				"request_id":                reqRow.ID,
-				"requestId":                 reqRow.ID,
-				"target_plugin_id":          reqRow.TargetPluginID,
-				"target_provider_plugin_id": reqRow.TargetPluginID,
-				"title":                     reqRow.Title,
-				"authors":                   reqRow.Authors,
-				"isbn":                      reqRow.ISBN,
-				"source_id":                 reqRow.SourceID,
-				"format_pref":               reqRow.FormatPref,
-				"media_type":                reqRow.MediaType,
-				"auto_monitor":              reqRow.AutoMonitor,
-			})
+		if err := s.submitRequest(r.Context(), reqRow); err != nil {
+			writeInternal(w, r, err)
+			return
 		}
 	}
 	writeJSON(w, 201, reqRow)
+}
+
+func publishRequestSubmitted(ctx context.Context, pub EventPublisher, req store.Request) {
+	if pub == nil {
+		return
+	}
+	target := strings.TrimSpace(req.TargetPluginID)
+	payload := map[string]any{
+		"request_id":   req.ID,
+		"requestId":    req.ID,
+		"title":        req.Title,
+		"authors":      req.Authors,
+		"isbn":         req.ISBN,
+		"source_id":    req.SourceID,
+		"format_pref":  req.FormatPref,
+		"media_type":   req.MediaType,
+		"auto_monitor": req.AutoMonitor,
+	}
+	if target != "" {
+		payload["target_plugin_id"] = target
+		payload["target_provider_plugin_id"] = target
+		if targeted, ok := pub.(TargetedEventPublisher); ok {
+			targeted.PublishTo(ctx, target, "request_submitted", payload)
+			return
+		}
+	}
+	pub.Publish(ctx, "request_submitted", payload)
 }
 
 func (s *Server) handleRequestRoutingPreview(w http.ResponseWriter, r *http.Request) {
