@@ -1,4 +1,4 @@
-import { Outlet, NavLink, Link, useLocation } from 'react-router';
+import { Outlet, NavLink, Link, useLocation } from "react-router";
 import {
   ArrowLeft,
   Compass,
@@ -10,17 +10,19 @@ import {
   Send,
   Smartphone,
   Shield,
-} from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { currentUser } from '@/lib/identity';
-import SearchBar from './SearchBar';
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import { currentUser } from "@/lib/identity";
+import SearchBar from "./SearchBar";
 
 export default function Layout() {
   const loc = useLocation();
   const user = currentUser();
-  const isAdminRoute = loc.pathname.startsWith('/admin');
-  const continuumHomeHref = isAdminRoute ? '/admin/plugins' : '/';
-  const continuumHomeTitle = isAdminRoute ? 'Back to Continuum plugins' : 'Back to Continuum';
+  const isAdminRoute = loc.pathname.startsWith("/admin");
+  const continuumHomeHref = isAdminRoute ? "/admin/plugins" : "/";
+  const continuumHomeTitle = isAdminRoute
+    ? "Back to Continuum plugins"
+    : "Back to Continuum";
   return (
     <div className="bg-background relative min-h-[100dvh] overflow-x-hidden text-foreground">
       <div className="from-primary/6 pointer-events-none fixed inset-x-0 top-0 z-0 h-48 bg-gradient-to-b to-transparent blur-3xl" />
@@ -37,7 +39,10 @@ export default function Layout() {
           <span className="text-border/60" aria-hidden>
             /
           </span>
-          <Link to="/" className="inline-flex min-h-9 items-center text-base font-semibold tracking-tight">
+          <Link
+            to="/"
+            className="inline-flex min-h-9 items-center text-base font-semibold tracking-tight"
+          >
             Ebooks
           </Link>
           <nav className="flex items-center gap-1 flex-wrap">
@@ -102,10 +107,10 @@ function NavTab({
       end={end}
       className={({ isActive }) =>
         cn(
-          'inline-flex min-h-9 items-center justify-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors',
+          "inline-flex min-h-9 items-center justify-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",
           isActive
-            ? 'bg-surface text-foreground'
-            : 'text-muted-foreground hover:bg-surface-hover hover:text-foreground',
+            ? "bg-surface text-foreground"
+            : "text-muted-foreground hover:bg-surface-hover hover:text-foreground",
         )
       }
     >

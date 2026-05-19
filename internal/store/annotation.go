@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -10,34 +11,57 @@ import (
 )
 
 type Annotation struct {
-	ID           string
-	UserID       string
-	BookID       string
-	CFIRange     string
-	Kind         string // highlight | note
-	Color        string
-	SelectedText string
-	NoteText     string
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
+	ID           string          `json:"id"`
+	UserID       string          `json:"user_id"`
+	BookID       string          `json:"book_id"`
+	CFIRange     string          `json:"cfi_range"`
+	Kind         string          `json:"kind"` // highlight | note | bookmark | excerpt | annotation
+	Color        string          `json:"color,omitempty"`
+	SelectedText string          `json:"selected_text"`
+	NoteText     string          `json:"note_text"`
+	ReadestType  string          `json:"readest_type"`
+	XPointer0    string          `json:"xpointer0"`
+	XPointer1    string          `json:"xpointer1"`
+	Page         *int            `json:"page,omitempty"`
+	Style        string          `json:"style"`
+	MetadataJSON json.RawMessage `json:"metadata_json"`
+	DeletedAt    *time.Time      `json:"deleted_at,omitempty"`
+	CreatedAt    time.Time       `json:"created_at"`
+	UpdatedAt    time.Time       `json:"updated_at"`
 }
 
 func (s *Store) InsertAnnotation(ctx context.Context, a Annotation) error {
+	if a.ReadestType == "" {
+		a.ReadestType = "annotation"
+	}
+	if len(a.MetadataJSON) == 0 {
+		a.MetadataJSON = []byte(`{}`)
+	}
 	_, err := s.pool.Exec(ctx, `
-		INSERT INTO annotation (id, user_id, book_id, cfi_range, kind, color, selected_text, note_text)
-		VALUES ($1, $2, $3, $4, $5, NULLIF($6,''), $7, $8)
-	`, a.ID, a.UserID, a.BookID, a.CFIRange, a.Kind, a.Color, a.SelectedText, a.NoteText)
+		INSERT INTO annotation (
+			id, user_id, book_id, cfi_range, kind, color, selected_text, note_text,
+			readest_type, xpointer0, xpointer1, page, style, metadata_json, deleted_at
+		)
+		VALUES ($1, $2, $3, $4, $5, NULLIF($6,''), $7, $8, $9, $10, $11, $12, $13, $14::jsonb, $15)
+	`, a.ID, a.UserID, a.BookID, a.CFIRange, a.Kind, a.Color, a.SelectedText, a.NoteText,
+		a.ReadestType, a.XPointer0, a.XPointer1, a.Page, a.Style, string(a.MetadataJSON), a.DeletedAt)
 	if err != nil {
 		return fmt.Errorf("insert annotation: %w", err)
 	}
 	return nil
 }
 
-func (s *Store) UpdateAnnotation(ctx context.Context, id, userID, color, noteText string) error {
+func (s *Store) UpdateAnnotation(ctx context.Context, id, userID string, a Annotation) error {
 	tag, err := s.pool.Exec(ctx, `
-		UPDATE annotation SET color = NULLIF($3,''), note_text = $4, updated_at = now()
+		UPDATE annotation SET
+			color = COALESCE(NULLIF($3,''), color),
+			note_text = $4,
+			cfi_range = COALESCE(NULLIF($5,''), cfi_range),
+			selected_text = COALESCE(NULLIF($6,''), selected_text),
+			style = COALESCE(NULLIF($7,''), style),
+			updated_at = now()
 		WHERE id = $1 AND user_id = $2
-	`, id, userID, color, noteText)
+	`, id, userID, a.Color, a.NoteText, a.CFIRange, a.SelectedText, a.Style)
 	if err != nil {
 		return fmt.Errorf("update annotation: %w", err)
 	}
@@ -60,7 +84,9 @@ func (s *Store) DeleteAnnotation(ctx context.Context, id, userID string) error {
 
 func (s *Store) ListAnnotationsByBook(ctx context.Context, userID, bookID string) ([]Annotation, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT id, user_id, book_id, cfi_range, kind, COALESCE(color,''), selected_text, note_text, created_at, updated_at
+		SELECT id, user_id, book_id, cfi_range, kind, COALESCE(color,''), selected_text, note_text,
+		       readest_type, xpointer0, xpointer1, page, style, metadata_json, deleted_at,
+		       created_at, updated_at
 		FROM annotation WHERE user_id = $1 AND book_id = $2 ORDER BY created_at
 	`, userID, bookID)
 	if err != nil {
@@ -75,7 +101,9 @@ func (s *Store) ListAnnotationsByUser(ctx context.Context, userID string, limit 
 		limit = 500
 	}
 	rows, err := s.pool.Query(ctx, `
-		SELECT id, user_id, book_id, cfi_range, kind, COALESCE(color,''), selected_text, note_text, created_at, updated_at
+		SELECT id, user_id, book_id, cfi_range, kind, COALESCE(color,''), selected_text, note_text,
+		       readest_type, xpointer0, xpointer1, page, style, metadata_json, deleted_at,
+		       created_at, updated_at
 		FROM annotation WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2
 	`, userID, limit)
 	if err != nil {
@@ -90,7 +118,9 @@ func scanAnnotations(rows pgx.Rows) ([]Annotation, error) {
 	for rows.Next() {
 		var a Annotation
 		if err := rows.Scan(&a.ID, &a.UserID, &a.BookID, &a.CFIRange, &a.Kind,
-			&a.Color, &a.SelectedText, &a.NoteText, &a.CreatedAt, &a.UpdatedAt); err != nil {
+			&a.Color, &a.SelectedText, &a.NoteText,
+			&a.ReadestType, &a.XPointer0, &a.XPointer1, &a.Page, &a.Style, &a.MetadataJSON, &a.DeletedAt,
+			&a.CreatedAt, &a.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scan: %w", err)
 		}
 		out = append(out, a)

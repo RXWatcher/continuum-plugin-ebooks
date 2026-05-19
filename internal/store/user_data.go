@@ -23,6 +23,13 @@ type UserData struct {
 	UpdatedAt    time.Time
 }
 
+type ReaderConfig struct {
+	UserID     string
+	BookID     string
+	ConfigJSON []byte
+	UpdatedAt  time.Time
+}
+
 func (s *Store) UpsertUserData(ctx context.Context, d UserData) error {
 	if d.UserID == "" || d.BookID == "" {
 		return fmt.Errorf("user_id and book_id required")
@@ -47,6 +54,41 @@ func (s *Store) UpsertUserData(ctx context.Context, d UserData) error {
 		return fmt.Errorf("upsert user_data: %w", err)
 	}
 	return nil
+}
+
+func (s *Store) UpsertReaderConfig(ctx context.Context, c ReaderConfig) error {
+	if c.UserID == "" || c.BookID == "" {
+		return fmt.Errorf("user_id and book_id required")
+	}
+	if len(c.ConfigJSON) == 0 {
+		c.ConfigJSON = []byte(`{}`)
+	}
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO reader_config (user_id, book_id, config_json, updated_at)
+		VALUES ($1, $2, $3::jsonb, now())
+		ON CONFLICT (user_id, book_id) DO UPDATE SET
+			config_json = EXCLUDED.config_json,
+			updated_at = now()
+	`, c.UserID, c.BookID, string(c.ConfigJSON))
+	if err != nil {
+		return fmt.Errorf("upsert reader_config: %w", err)
+	}
+	return nil
+}
+
+func (s *Store) GetReaderConfig(ctx context.Context, userID, bookID string) (ReaderConfig, error) {
+	row := s.pool.QueryRow(ctx, `
+		SELECT user_id, book_id, config_json, updated_at
+		FROM reader_config WHERE user_id = $1 AND book_id = $2
+	`, userID, bookID)
+	var c ReaderConfig
+	if err := row.Scan(&c.UserID, &c.BookID, &c.ConfigJSON, &c.UpdatedAt); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ReaderConfig{}, ErrNotFound
+		}
+		return ReaderConfig{}, fmt.Errorf("get reader_config: %w", err)
+	}
+	return c, nil
 }
 
 func (s *Store) GetUserData(ctx context.Context, userID, bookID string) (UserData, error) {

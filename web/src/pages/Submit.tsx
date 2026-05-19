@@ -12,7 +12,10 @@ import {
 import { Button } from "@/components/ui/button";
 
 function providerSummary(provider: InstalledBackend) {
-  return provider.summary || "Use this provider for its configured ebook acquisition workflow.";
+  return (
+    provider.summary ||
+    "Use this provider for its configured ebook acquisition workflow."
+  );
 }
 
 export default function Submit() {
@@ -134,7 +137,8 @@ export default function Submit() {
             <option value="magazine">Magazine</option>
           </select>
         </div>
-        {selectedProvider?.plugin_id === "continuum.annas-archive-downloader" && (
+        {selectedProvider?.plugin_id ===
+          "continuum.annas-archive-downloader" && (
           <Field
             label="Anna's Archive source ID"
             value={sourceID}

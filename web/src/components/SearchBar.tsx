@@ -1,19 +1,19 @@
-import { useEffect, useRef, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router';
-import { Search, X } from 'lucide-react';
+import { useEffect, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router";
+import { Search, X } from "lucide-react";
 
 export default function SearchBar() {
   const nav = useNavigate();
   const loc = useLocation();
-  const [q, setQ] = useState('');
+  const [q, setQ] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (loc.pathname === '/search') {
+    if (loc.pathname === "/search") {
       const params = new URLSearchParams(loc.search);
-      setQ(params.get('q') ?? '');
+      setQ(params.get("q") ?? "");
     } else {
-      setQ('');
+      setQ("");
     }
   }, [loc.pathname, loc.search]);
 
@@ -32,7 +32,7 @@ export default function SearchBar() {
         value={q}
         onChange={(e) => setQ(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === 'Enter') {
+          if (e.key === "Enter") {
             e.preventDefault();
             submit();
           }
@@ -47,7 +47,7 @@ export default function SearchBar() {
         <button
           type="button"
           onClick={() => {
-            setQ('');
+            setQ("");
             inputRef.current?.focus();
           }}
           className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1.5 transition-colors hover:bg-accent"

@@ -97,16 +97,18 @@ const requestStatuses = [
 const trackedRequestStatuses = requestStatuses.filter(Boolean);
 
 function providerProfile(provider: InstalledBackend) {
-  const supportsAutoMonitoring = provider.ebook_backend?.metadata?.supports_auto_monitoring === true;
+  const supportsAutoMonitoring =
+    provider.ebook_backend?.metadata?.supports_auto_monitoring === true;
   return {
     role: "Download provider",
-    summary: provider.summary || "Accepts ebook request events and returns status updates.",
+    summary:
+      provider.summary ||
+      "Accepts ebook request events and returns status updates.",
     bestFor:
       "Provider-specific acquisition flows exposed through the ebook request router.",
-    requirements:
-      supportsAutoMonitoring
-        ? "The plugin must be enabled and configured. This provider advertises auto-monitoring support."
-        : "The plugin must be enabled and configured. Request handling depends on provider capabilities.",
+    requirements: supportsAutoMonitoring
+      ? "The plugin must be enabled and configured. This provider advertises auto-monitoring support."
+      : "The plugin must be enabled and configured. Request handling depends on provider capabilities.",
   };
 }
 
@@ -351,7 +353,12 @@ function LibrariesTab({
   );
   const sync = useMutation({
     mutationFn: () => adminSyncLibraries(syncBackend),
-    onSuccess: (r: { created: number; updated: number; pruned: number; kept: number }) => {
+    onSuccess: (r: {
+      created: number;
+      updated: number;
+      pruned: number;
+      kept: number;
+    }) => {
       toast.success(
         `Synced: ${r.created} created, ${r.updated} updated, ${r.pruned} pruned`,
       );
@@ -444,8 +451,8 @@ function LibrariesTab({
               <CardDescription>
                 Presentation libraries are the top-level shelves users browse.
                 Each one points to a catalog source and can optionally narrow to
-                a source sub-library for
-                comics, manga, magazines, or standard books.
+                a source sub-library for comics, manga, magazines, or standard
+                books.
               </CardDescription>
             </div>
             <div className="flex gap-2">

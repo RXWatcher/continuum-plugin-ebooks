@@ -190,7 +190,8 @@ function EmptyState({ isAdmin }: { isAdmin: boolean }) {
         </div>
       ) : (
         <p className="mt-4 text-xs text-muted-foreground">
-          Ask an administrator to connect an ebook backend or run a library scan.
+          Ask an administrator to connect an ebook backend or run a library
+          scan.
         </p>
       )}
     </div>

@@ -1,6 +1,6 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
-import { toast } from 'sonner';
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import { toast } from "sonner";
 import {
   createOPDSToken,
   deleteKosync,
@@ -8,9 +8,9 @@ import {
   listOPDSTokens,
   registerKosync,
   revokeOPDSToken,
-} from '@/lib/api';
-import { Button } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
+} from "@/lib/api";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 
 // Apps page: per-spec Layer 5.1, this is the user's settings panel for the
 // reader integrations (OPDS tokens, KOReader kosync). Each section is
@@ -27,28 +27,28 @@ export default function Apps() {
 
 function OPDSSection() {
   const qc = useQueryClient();
-  const q = useQuery({ queryKey: ['opds-tokens'], queryFn: listOPDSTokens });
-  const [label, setLabel] = useState('');
+  const q = useQuery({ queryKey: ["opds-tokens"], queryFn: listOPDSTokens });
+  const [label, setLabel] = useState("");
   const create = useMutation({
-    mutationFn: () => createOPDSToken(label || 'Reader'),
+    mutationFn: () => createOPDSToken(label || "Reader"),
     onSuccess: (data) => {
       toast.success(`OPDS token (save now): ${data.jti_shown_once}`);
-      setLabel('');
-      qc.invalidateQueries({ queryKey: ['opds-tokens'] });
+      setLabel("");
+      qc.invalidateQueries({ queryKey: ["opds-tokens"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
   const revoke = useMutation({
     mutationFn: (id: string) => revokeOPDSToken(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['opds-tokens'] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["opds-tokens"] }),
     onError: (e: Error) => toast.error(e.message),
   });
   return (
     <section>
       <h2 className="mb-2 text-base font-semibold">OPDS feed</h2>
       <p className="mb-3 text-sm text-muted-foreground">
-        Generate a per-device password for the OPDS feed. Use your username + the
-        shown password in your reader app.
+        Generate a per-device password for the OPDS feed. Use your username +
+        the shown password in your reader app.
       </p>
       <form
         onSubmit={(e) => {
@@ -76,14 +76,14 @@ function OPDSSection() {
               key={t.id}
               className="flex items-center justify-between rounded-lg border border-border bg-card px-4 py-2 text-sm"
             >
-              <span>{t.label || '(unnamed)'}</span>
+              <span>{t.label || "(unnamed)"}</span>
               <Button
                 size="sm"
                 variant="ghost"
                 disabled={t.revoked || revoke.isPending}
                 onClick={() => revoke.mutate(t.id)}
               >
-                {t.revoked ? 'Revoked' : 'Revoke'}
+                {t.revoked ? "Revoked" : "Revoke"}
               </Button>
             </li>
           ))}
@@ -97,21 +97,21 @@ function OPDSSection() {
 
 function KOReaderSection() {
   const qc = useQueryClient();
-  const status = useQuery({ queryKey: ['kosync'], queryFn: getKosyncStatus });
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
+  const status = useQuery({ queryKey: ["kosync"], queryFn: getKosyncStatus });
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const reg = useMutation({
     mutationFn: () => registerKosync(username, password),
     onSuccess: () => {
-      toast.success('KOReader sync configured');
-      setPassword('');
-      qc.invalidateQueries({ queryKey: ['kosync'] });
+      toast.success("KOReader sync configured");
+      setPassword("");
+      qc.invalidateQueries({ queryKey: ["kosync"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
   const del = useMutation({
     mutationFn: deleteKosync,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['kosync'] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["kosync"] }),
     onError: (e: Error) => toast.error(e.message),
   });
   return (
@@ -124,7 +124,12 @@ function KOReaderSection() {
           <span>
             Registered as <code>{status.data.kosync_username}</code>
           </span>
-          <Button size="sm" variant="ghost" onClick={() => del.mutate()} disabled={del.isPending}>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => del.mutate()}
+            disabled={del.isPending}
+          >
             Disconnect
           </Button>
         </div>
@@ -149,7 +154,10 @@ function KOReaderSection() {
             placeholder="kosync password"
             className="flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-sm"
           />
-          <Button type="submit" disabled={!username || !password || reg.isPending}>
+          <Button
+            type="submit"
+            disabled={!username || !password || reg.isPending}
+          >
             Register
           </Button>
         </form>

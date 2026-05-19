@@ -4,7 +4,7 @@
 // (no plugin proxy prefix).
 export function extractMountPath(pathname: string): string {
   const m = pathname.match(/^(\/api\/v1\/plugins\/\d+)/);
-  return m ? m[1] : '';
+  return m ? m[1] : "";
 }
 
 export function mountPath(): string {

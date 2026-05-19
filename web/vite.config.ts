@@ -11,7 +11,11 @@ export default defineConfig({
   base: './',
   plugins: [react(), tailwindcss()],
   resolve: {
-    alias: { '@': path.resolve(__dirname, './src') },
+    alias: {
+      '@': path.resolve(__dirname, './src'),
+      '@readest': path.resolve(__dirname, './src/reader/readest'),
+      '@pdfjs': path.resolve(__dirname, './public/vendor/pdfjs'),
+    },
   },
   build: { outDir: 'dist', emptyOutDir: true },
 });

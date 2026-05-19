@@ -160,6 +160,24 @@ export type UserData = {
   last_read_at?: string;
 };
 
+export type ReaderConfigEnvelope = {
+  book_id: string;
+  config: Record<string, unknown>;
+  updated_at?: string;
+};
+
+export type ExternalReaderProgress = {
+  source: "kosync" | string;
+  document: string;
+  progress: string;
+  percentage?: number;
+  device?: string;
+  device_id?: string;
+  timestamp?: string;
+  canResume?: boolean;
+  location?: string;
+};
+
 export type Request = {
   id: string;
   user_id: string;
@@ -200,7 +218,15 @@ export type Annotation = {
   color?: string;
   selected_text?: string;
   note_text?: string;
+  readest_type?: "bookmark" | "annotation" | "excerpt" | string;
+  xpointer0?: string;
+  xpointer1?: string;
+  page?: number;
+  style?: "highlight" | "underline" | "squiggly" | string;
+  metadata_json?: Record<string, unknown>;
+  deleted_at?: string;
   created_at?: string;
+  updated_at?: string;
 };
 
 // -- Catalog ---------------------------------------------------------------
@@ -295,6 +321,29 @@ export const updateProgress = (bookID: string, body: Partial<UserData>) =>
 
 export const updateBookMeta = (bookID: string, body: Partial<UserData>) =>
   api.patch(`/api/v1/me/books/${encodeURIComponent(bookID)}`, body);
+
+export const getReaderConfig = (bookID: string) =>
+  api.get<ReaderConfigEnvelope>(
+    `/api/v1/me/books/${encodeURIComponent(bookID)}/reader-config`,
+  );
+
+export const putReaderConfig = (
+  bookID: string,
+  config: Record<string, unknown>,
+) =>
+  api.put<ReaderConfigEnvelope>(
+    `/api/v1/me/books/${encodeURIComponent(bookID)}/reader-config`,
+    { config },
+  );
+
+export const linkKosyncBook = (
+  bookID: string,
+  body: { document: string; format?: string },
+) =>
+  api.post<{ book_id: string; document: string; format: string }>(
+    `/api/v1/me/books/${encodeURIComponent(bookID)}/kosync-link`,
+    body,
+  );
 
 export const listAnnotations = (bookID: string) =>
   api.get<{ items: Annotation[] }>(
@@ -632,7 +681,9 @@ export type InstalledCapability = {
 function ebookBackendCapability(
   capabilities: InstalledCapability[],
 ): InstalledCapability | undefined {
-  return capabilities.find((capability) => capability.type === "ebook_backend.v1");
+  return capabilities.find(
+    (capability) => capability.type === "ebook_backend.v1",
+  );
 }
 
 function ebookRoles(capability?: InstalledCapability): string[] {
@@ -672,31 +723,35 @@ async function fetchInstalledEbookPlugins(): Promise<InstalledBackend[]> {
       const capabilities = i.capabilities ?? [];
       return i.enabled && !!ebookBackendCapability(capabilities);
     })
-    .map((i: {
-      id: number;
-      plugin_id: string;
-      display_name?: string;
-      enabled: boolean;
-      capabilities?: InstalledCapability[];
-      metadata?: Record<string, unknown>;
-    }) => {
-      const capabilities = i.capabilities ?? [];
-      const ebookBackend = ebookBackendCapability(capabilities);
-      return {
-        id: i.id,
-        plugin_id: i.plugin_id,
-        enabled: i.enabled,
-        capabilities,
-        ebook_backend: ebookBackend,
-        ebook_roles: ebookRoles(ebookBackend),
-        display_name:
-          ebookBackend?.display_name ||
-          i.display_name ||
-          (typeof i.metadata?.display_name === "string" ? i.metadata.display_name : undefined) ||
-          i.plugin_id,
-        summary: ebookBackend?.description,
-      };
-    });
+    .map(
+      (i: {
+        id: number;
+        plugin_id: string;
+        display_name?: string;
+        enabled: boolean;
+        capabilities?: InstalledCapability[];
+        metadata?: Record<string, unknown>;
+      }) => {
+        const capabilities = i.capabilities ?? [];
+        const ebookBackend = ebookBackendCapability(capabilities);
+        return {
+          id: i.id,
+          plugin_id: i.plugin_id,
+          enabled: i.enabled,
+          capabilities,
+          ebook_backend: ebookBackend,
+          ebook_roles: ebookRoles(ebookBackend),
+          display_name:
+            ebookBackend?.display_name ||
+            i.display_name ||
+            (typeof i.metadata?.display_name === "string"
+              ? i.metadata.display_name
+              : undefined) ||
+            i.plugin_id,
+          summary: ebookBackend?.description,
+        };
+      },
+    );
 }
 
 export async function fetchInstalledBackends(): Promise<InstalledBackend[]> {

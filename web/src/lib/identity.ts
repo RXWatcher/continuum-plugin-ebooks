@@ -1,4 +1,4 @@
-import { fetchIdentity, type Identity } from './api';
+import { fetchIdentity, type Identity } from "./api";
 
 let cached: Identity | null = null;
 

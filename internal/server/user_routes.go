@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -25,6 +26,9 @@ func (s *Server) mountUserRoutes(r chi.Router) {
 	r.Get("/me/library", s.handleLibrary)
 	r.Get("/me/progress", s.handleRecentProgress)
 	r.Get("/me/books/{id}", s.handleGetBookUserData)
+	r.Get("/me/books/{id}/reader-config", s.handleGetReaderConfig)
+	r.Put("/me/books/{id}/reader-config", s.handlePutReaderConfig)
+	r.Post("/me/books/{id}/kosync-link", s.handleLinkKosyncBook)
 	r.Post("/me/books/{id}/progress", s.handleUpdateProgress)
 	r.Patch("/me/books/{id}", s.handleUpdateBookMeta)
 	r.Get("/me/books/{id}/file", s.handleStreamFile)
@@ -234,6 +238,189 @@ func (s *Server) handleGetBookUserData(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, row)
 }
 
+func (s *Server) handleGetReaderConfig(w http.ResponseWriter, r *http.Request) {
+	id, _ := auth.FromContext(r.Context())
+	bookID := chi.URLParam(r, "id")
+	row, err := s.deps.Store.GetReaderConfig(r.Context(), id.UserID, bookID)
+	if err != nil {
+		if err == store.ErrNotFound {
+			if userData, dataErr := s.deps.Store.GetUserData(r.Context(), id.UserID, bookID); dataErr == nil {
+				config := readerConfigFromUserData(userData)
+				s.addExternalReaderProgress(r.Context(), id.UserID, bookID, config)
+				writeJSON(w, 200, map[string]any{
+					"book_id": bookID,
+					"config":  config,
+				})
+				return
+			}
+			config := map[string]any{}
+			s.addExternalReaderProgress(r.Context(), id.UserID, bookID, config)
+			writeJSON(w, 200, map[string]any{
+				"book_id": bookID,
+				"config":  config,
+			})
+			return
+		}
+		writeInternal(w, r, err)
+		return
+	}
+	var config map[string]any
+	if err := json.Unmarshal(row.ConfigJSON, &config); err != nil {
+		writeInternal(w, r, err)
+		return
+	}
+	s.addExternalReaderProgress(r.Context(), id.UserID, bookID, config)
+	writeJSON(w, 200, map[string]any{
+		"book_id":    bookID,
+		"config":     config,
+		"updated_at": row.UpdatedAt,
+	})
+}
+
+func readerConfigFromUserData(row store.UserData) map[string]any {
+	config := map[string]any{}
+	if row.LastCFI != "" {
+		config["location"] = row.LastCFI
+	}
+	if row.CurrentPage > 0 && row.ReadProgress > 0 {
+		total := math.Round(float64(row.CurrentPage) / row.ReadProgress)
+		if total > 0 {
+			config["progress"] = []float64{float64(row.CurrentPage), total}
+		}
+	} else if row.ReadProgress > 0 {
+		config["progress"] = []float64{row.ReadProgress * 100, 100}
+	}
+	return config
+}
+
+func (s *Server) addExternalReaderProgress(ctx context.Context, userID, bookID string, config map[string]any) {
+	link, err := s.deps.Store.FindKosyncBookLinkByBook(ctx, userID, bookID)
+	if err != nil {
+		return
+	}
+	progress, err := s.deps.Store.GetKosyncProgress(ctx, userID, link.Document)
+	if err != nil {
+		return
+	}
+	external := map[string]any{
+		"source":     "kosync",
+		"document":   progress.Document,
+		"progress":   progress.Progress,
+		"percentage": progress.Percentage,
+		"device":     progress.Device,
+		"device_id":  progress.DeviceID,
+		"timestamp":  progress.Timestamp,
+		"canResume":  false,
+	}
+	if strings.HasPrefix(progress.Progress, "epubcfi(") {
+		external["location"] = progress.Progress
+		external["canResume"] = true
+	}
+	config["externalProgress"] = external
+}
+
+func (s *Server) handlePutReaderConfig(w http.ResponseWriter, r *http.Request) {
+	id, _ := auth.FromContext(r.Context())
+	bookID := chi.URLParam(r, "id")
+	var body struct {
+		Config json.RawMessage `json:"config"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeErr(w, 400, err.Error())
+		return
+	}
+	if len(body.Config) == 0 {
+		body.Config = json.RawMessage(`{}`)
+	}
+	if !json.Valid(body.Config) {
+		writeErr(w, 400, "config must be valid JSON")
+		return
+	}
+	if err := s.deps.Store.UpsertReaderConfig(r.Context(), store.ReaderConfig{
+		UserID:     id.UserID,
+		BookID:     bookID,
+		ConfigJSON: body.Config,
+	}); err != nil {
+		writeInternal(w, r, err)
+		return
+	}
+	if err := s.mirrorReaderConfigProgress(r.Context(), id.UserID, bookID, body.Config); err != nil {
+		writeInternal(w, r, err)
+		return
+	}
+	writeJSON(w, 200, map[string]any{
+		"book_id": bookID,
+		"config":  json.RawMessage(body.Config),
+	})
+}
+
+func (s *Server) handleLinkKosyncBook(w http.ResponseWriter, r *http.Request) {
+	id, _ := auth.FromContext(r.Context())
+	bookID := chi.URLParam(r, "id")
+	var body struct {
+		Document string `json:"document"`
+		Format   string `json:"format"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeErr(w, 400, err.Error())
+		return
+	}
+	body.Document = strings.TrimSpace(body.Document)
+	body.Format = strings.ToLower(strings.TrimSpace(body.Format))
+	if body.Document == "" {
+		writeErr(w, 400, "document required")
+		return
+	}
+	if body.Format == "" {
+		body.Format = "epub"
+	}
+	if err := s.deps.Store.UpsertKosyncBookLink(r.Context(), store.KosyncBookLink{
+		UserID:   id.UserID,
+		BookID:   bookID,
+		Document: body.Document,
+		Format:   body.Format,
+	}); err != nil {
+		writeInternal(w, r, err)
+		return
+	}
+	writeJSON(w, 200, map[string]any{
+		"book_id":  bookID,
+		"document": body.Document,
+		"format":   body.Format,
+	})
+}
+
+func (s *Server) mirrorReaderConfigProgress(ctx context.Context, userID, bookID string, raw json.RawMessage) error {
+	var cfg struct {
+		Location string    `json:"location"`
+		Progress []float64 `json:"progress"`
+	}
+	if err := json.Unmarshal(raw, &cfg); err != nil {
+		return err
+	}
+	if cfg.Location == "" && len(cfg.Progress) == 0 {
+		return nil
+	}
+	cur, _ := s.deps.Store.GetUserData(ctx, userID, bookID)
+	cur.UserID = userID
+	cur.BookID = bookID
+	if cfg.Location != "" {
+		cur.LastCFI = cfg.Location
+	}
+	if len(cfg.Progress) >= 2 {
+		current := int(cfg.Progress[0])
+		total := cfg.Progress[1]
+		cur.CurrentPage = current
+		if total > 0 {
+			cur.ReadProgress = cfg.Progress[0] / total
+			cur.IsFinished = cur.ReadProgress >= 0.98
+		}
+	}
+	now := time.Now()
+	cur.LastReadAt = &now
+	return s.deps.Store.UpsertUserData(ctx, cur)
+}
+
 func (s *Server) handleUpdateProgress(w http.ResponseWriter, r *http.Request) {
 	id, _ := auth.FromContext(r.Context())
 	bookID := chi.URLParam(r, "id")
@@ -388,20 +575,31 @@ func (s *Server) handleCreateAnnotation(w http.ResponseWriter, r *http.Request) 
 	id, _ := auth.FromContext(r.Context())
 	bookID := chi.URLParam(r, "id")
 	var body struct {
-		CFIRange     string `json:"cfi_range"`
-		Kind         string `json:"kind"`
-		Color        string `json:"color"`
-		SelectedText string `json:"selected_text"`
-		NoteText     string `json:"note_text"`
+		CFIRange     string          `json:"cfi_range"`
+		Kind         string          `json:"kind"`
+		Color        string          `json:"color"`
+		SelectedText string          `json:"selected_text"`
+		NoteText     string          `json:"note_text"`
+		ReadestType  string          `json:"readest_type"`
+		XPointer0    string          `json:"xpointer0"`
+		XPointer1    string          `json:"xpointer1"`
+		Page         *int            `json:"page"`
+		Style        string          `json:"style"`
+		MetadataJSON json.RawMessage `json:"metadata_json"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeErr(w, 400, err.Error())
 		return
 	}
+	if len(body.MetadataJSON) == 0 {
+		body.MetadataJSON = json.RawMessage(`{}`)
+	}
 	ann := store.Annotation{
 		ID: ulid.Make().String(), UserID: id.UserID, BookID: bookID,
 		CFIRange: body.CFIRange, Kind: body.Kind, Color: body.Color,
 		SelectedText: body.SelectedText, NoteText: body.NoteText,
+		ReadestType: body.ReadestType, XPointer0: body.XPointer0, XPointer1: body.XPointer1,
+		Page: body.Page, Style: body.Style, MetadataJSON: body.MetadataJSON,
 	}
 	if err := s.deps.Store.InsertAnnotation(r.Context(), ann); err != nil {
 		writeInternal(w, r, err)
@@ -414,11 +612,20 @@ func (s *Server) handleUpdateAnnotation(w http.ResponseWriter, r *http.Request) 
 	id, _ := auth.FromContext(r.Context())
 	annID := chi.URLParam(r, "annId")
 	var body struct {
-		Color    string `json:"color"`
-		NoteText string `json:"note_text"`
+		CFIRange     string `json:"cfi_range"`
+		Color        string `json:"color"`
+		SelectedText string `json:"selected_text"`
+		NoteText     string `json:"note_text"`
+		Style        string `json:"style"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&body)
-	if err := s.deps.Store.UpdateAnnotation(r.Context(), annID, id.UserID, body.Color, body.NoteText); err != nil {
+	if err := s.deps.Store.UpdateAnnotation(r.Context(), annID, id.UserID, store.Annotation{
+		CFIRange:     body.CFIRange,
+		Color:        body.Color,
+		SelectedText: body.SelectedText,
+		NoteText:     body.NoteText,
+		Style:        body.Style,
+	}); err != nil {
 		writeErr(w, 404, err.Error())
 		return
 	}
