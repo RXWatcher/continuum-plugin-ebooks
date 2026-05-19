@@ -546,13 +546,17 @@ export const adminReplaceRoutingRules = (items: RequestRoutingRule[]) =>
 
 export type BackendConfig = {
   target_backend_plugin_id: string;
+  target_backend_installation_id: string;
   auto_approve_requests: boolean;
   default_streaming_mode: string;
   cache_dir: string;
   cache_max_size_gb: number;
   cache_download_concurrency: number;
+  path_remappings: unknown[];
   opds_realm: string;
+  kindle_smtp_config: Record<string, unknown>;
   kepubify_path: string;
+  standalone_http_listen: string;
   libraries?: LibraryInfo[];
 };
 

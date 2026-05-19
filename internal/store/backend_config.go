@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"time"
 
@@ -24,6 +25,7 @@ type Config struct {
 	OpdsRealm                string
 	KindleSMTPConfig         []byte
 	KepubifyPath             string
+	StandaloneHTTPListen     string
 	UpdatedAt                time.Time
 }
 
@@ -59,6 +61,18 @@ func (c Config) BackendTarget() string {
 // HasBackend reports whether a usable backend target is configured.
 func (c Config) HasBackend() bool { return c.BackendTarget() != "" }
 
+func defaultConfigShape() Config {
+	return Config{
+		DefaultStreamingMode:     "proxy",
+		CacheMaxSizeGB:           10,
+		CacheDownloadConcurrency: 4,
+		PathRemappings:           []byte("[]"),
+		OpdsRealm:                "Continuum Library",
+		KindleSMTPConfig:         []byte("{}"),
+		KepubifyPath:             "/usr/local/bin/kepubify",
+	}
+}
+
 func isNumericID(value string) bool {
 	value = strings.TrimSpace(value)
 	if value == "" {
@@ -81,7 +95,7 @@ func (s *Store) GetConfig(ctx context.Context) (Config, error) {
 		       auto_approve_requests, default_streaming_mode,
 		       COALESCE(cache_dir,''), cache_max_size_gb, cache_download_concurrency,
 		       path_remappings, kosync_secret, opds_realm, kindle_smtp_config,
-		       kepubify_path, updated_at
+		       kepubify_path, standalone_http_listen, updated_at
 		FROM backend_config WHERE id = 1
 	`)
 	var c Config
@@ -89,7 +103,7 @@ func (s *Store) GetConfig(ctx context.Context) (Config, error) {
 		&c.AutoApproveRequests, &c.DefaultStreamingMode,
 		&c.CacheDir, &c.CacheMaxSizeGB, &c.CacheDownloadConcurrency,
 		&c.PathRemappings, &c.KosyncSecret, &c.OpdsRealm, &c.KindleSMTPConfig,
-		&c.KepubifyPath, &c.UpdatedAt); err != nil {
+		&c.KepubifyPath, &c.StandaloneHTTPListen, &c.UpdatedAt); err != nil {
 		if !errors.Is(err, pgx.ErrNoRows) {
 			return Config{}, fmt.Errorf("get config: %w", err)
 		}
@@ -111,11 +125,45 @@ func (s *Store) GetConfig(ctx context.Context) (Config, error) {
 
 // UpsertConfig replaces the singleton row.
 func (s *Store) UpsertConfig(ctx context.Context, c Config) error {
+	c = configWithDefaults(c)
 	if len(c.KosyncSecret) == 0 {
 		existing, err := s.GetConfig(ctx)
 		if err == nil {
 			c.KosyncSecret = existing.KosyncSecret
 		}
+	}
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO backend_config (id, target_backend_plugin_id, target_backend_installation_id, auto_approve_requests,
+			default_streaming_mode, cache_dir, cache_max_size_gb, cache_download_concurrency,
+			path_remappings, kosync_secret, opds_realm, kindle_smtp_config, kepubify_path, standalone_http_listen, updated_at)
+		VALUES (1, $1, $2, $3, $4, NULLIF($5,''), $6, $7, $8, $9, $10, $11, $12, $13, now())
+		ON CONFLICT (id) DO UPDATE SET
+			target_backend_plugin_id   = EXCLUDED.target_backend_plugin_id,
+			target_backend_installation_id = EXCLUDED.target_backend_installation_id,
+			auto_approve_requests      = EXCLUDED.auto_approve_requests,
+			default_streaming_mode     = EXCLUDED.default_streaming_mode,
+			cache_dir                  = EXCLUDED.cache_dir,
+			cache_max_size_gb          = EXCLUDED.cache_max_size_gb,
+			cache_download_concurrency = EXCLUDED.cache_download_concurrency,
+			path_remappings            = EXCLUDED.path_remappings,
+			kosync_secret              = EXCLUDED.kosync_secret,
+			opds_realm                 = EXCLUDED.opds_realm,
+			kindle_smtp_config         = EXCLUDED.kindle_smtp_config,
+			kepubify_path              = EXCLUDED.kepubify_path,
+			standalone_http_listen     = EXCLUDED.standalone_http_listen,
+			updated_at                 = now()
+	`, c.TargetBackendPluginID, c.TargetBackendInstallID, c.AutoApproveRequests, c.DefaultStreamingMode,
+		c.CacheDir, c.CacheMaxSizeGB, c.CacheDownloadConcurrency,
+		c.PathRemappings, c.KosyncSecret, c.OpdsRealm, c.KindleSMTPConfig, c.KepubifyPath, c.StandaloneHTTPListen)
+	if err != nil {
+		return fmt.Errorf("upsert config: %w", err)
+	}
+	return nil
+}
+
+func configWithDefaults(c Config) Config {
+	if len(c.KosyncSecret) == 0 {
+		c.KosyncSecret = nil
 	}
 	if c.DefaultStreamingMode == "" {
 		c.DefaultStreamingMode = "proxy"
@@ -132,30 +180,34 @@ func (s *Store) UpsertConfig(ctx context.Context, c Config) error {
 	if len(c.KindleSMTPConfig) == 0 {
 		c.KindleSMTPConfig = []byte("{}")
 	}
-	_, err := s.pool.Exec(ctx, `
-		INSERT INTO backend_config (id, target_backend_plugin_id, target_backend_installation_id, auto_approve_requests,
-			default_streaming_mode, cache_dir, cache_max_size_gb, cache_download_concurrency,
-			path_remappings, kosync_secret, opds_realm, kindle_smtp_config, kepubify_path, updated_at)
-		VALUES (1, $1, $2, $3, $4, NULLIF($5,''), $6, $7, $8, $9, $10, $11, $12, now())
-		ON CONFLICT (id) DO UPDATE SET
-			target_backend_plugin_id   = EXCLUDED.target_backend_plugin_id,
-			target_backend_installation_id = EXCLUDED.target_backend_installation_id,
-			auto_approve_requests      = EXCLUDED.auto_approve_requests,
-			default_streaming_mode     = EXCLUDED.default_streaming_mode,
-			cache_dir                  = EXCLUDED.cache_dir,
-			cache_max_size_gb          = EXCLUDED.cache_max_size_gb,
-			cache_download_concurrency = EXCLUDED.cache_download_concurrency,
-			path_remappings            = EXCLUDED.path_remappings,
-			kosync_secret              = EXCLUDED.kosync_secret,
-			opds_realm                 = EXCLUDED.opds_realm,
-			kindle_smtp_config         = EXCLUDED.kindle_smtp_config,
-			kepubify_path              = EXCLUDED.kepubify_path,
-			updated_at                 = now()
-	`, c.TargetBackendPluginID, c.TargetBackendInstallID, c.AutoApproveRequests, c.DefaultStreamingMode,
-		c.CacheDir, c.CacheMaxSizeGB, c.CacheDownloadConcurrency,
-		c.PathRemappings, c.KosyncSecret, c.OpdsRealm, c.KindleSMTPConfig, c.KepubifyPath)
+	return c
+}
+
+func (s *Store) ImportLegacyConfig(ctx context.Context, legacy Config) (bool, error) {
+	current, err := s.GetConfig(ctx)
 	if err != nil {
-		return fmt.Errorf("upsert config: %w", err)
+		return false, err
 	}
-	return nil
+	if !configIsDefault(current) {
+		return false, nil
+	}
+	next := configWithDefaults(legacy)
+	next.KosyncSecret = current.KosyncSecret
+	if reflect.DeepEqual(configComparable(next), configComparable(current)) {
+		return false, nil
+	}
+	if err := s.UpsertConfig(ctx, next); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func configIsDefault(c Config) bool {
+	return reflect.DeepEqual(configComparable(configWithDefaults(c)), configComparable(defaultConfigShape()))
+}
+
+func configComparable(c Config) Config {
+	c.KosyncSecret = nil
+	c.UpdatedAt = time.Time{}
+	return c
 }

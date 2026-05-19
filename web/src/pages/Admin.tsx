@@ -2196,13 +2196,46 @@ function SettingsTab({
 }) {
   const qc = useQueryClient();
   const [draft, setDraft] = useState<Partial<BackendConfig>>({});
+  const [pathRemappingsText, setPathRemappingsText] = useState("[]");
+  const [kindleSMTPText, setKindleSMTPText] = useState("{}");
 
   useEffect(() => {
-    if (backend) setDraft(backend);
+    if (backend) {
+      setDraft(backend);
+      setPathRemappingsText(
+        JSON.stringify(backend.path_remappings ?? [], null, 2),
+      );
+      setKindleSMTPText(
+        JSON.stringify(backend.kindle_smtp_config ?? {}, null, 2),
+      );
+    }
   }, [backend]);
 
   const save = useMutation({
-    mutationFn: () => adminPatchBackend(draft),
+    mutationFn: () => {
+      let path_remappings: unknown[];
+      let kindle_smtp_config: Record<string, unknown>;
+      try {
+        const parsed = JSON.parse(pathRemappingsText || "[]");
+        path_remappings = Array.isArray(parsed) ? parsed : [];
+      } catch {
+        throw new Error("Path remappings must be a JSON array.");
+      }
+      try {
+        const parsed = JSON.parse(kindleSMTPText || "{}");
+        kindle_smtp_config =
+          parsed && typeof parsed === "object" && !Array.isArray(parsed)
+            ? parsed
+            : {};
+      } catch {
+        throw new Error("Kindle SMTP config must be a JSON object.");
+      }
+      return adminPatchBackend({
+        ...draft,
+        path_remappings,
+        kindle_smtp_config,
+      });
+    },
     onSuccess: () => {
       toast.success("Settings saved");
       qc.invalidateQueries({ queryKey: ["admin", "backend"] });
@@ -2329,10 +2362,53 @@ function SettingsTab({
           />
         </Field>
         <Field
-          label="Cache directory"
-          description="Resolved runtime cache location. It is read-only here because changing it requires plugin configuration and a restart."
+          label="Standalone listen address"
+          description="Optional direct HTTP listener for reverse-proxied OPDS, KOReader, Kobo, and Kindle routes. Restart the plugin after changing this value."
         >
-          <Input value={draft.cache_dir || ""} disabled />
+          <Input
+            value={draft.standalone_http_listen || ""}
+            onChange={(e) =>
+              setDraft((d) => ({
+                ...d,
+                standalone_http_listen: e.target.value,
+              }))
+            }
+            placeholder="127.0.0.1:7878"
+          />
+        </Field>
+        <Field
+          label="Cache directory"
+          description="Local directory used for cached ebook files. Restart the plugin after changing this path so cache workers reopen on the new directory."
+        >
+          <Input
+            value={draft.cache_dir || ""}
+            onChange={(e) =>
+              setDraft((d) => ({ ...d, cache_dir: e.target.value }))
+            }
+            placeholder="/var/lib/continuum/ebooks-cache"
+          />
+        </Field>
+        <Field
+          label="Path remappings"
+          description="JSON array used when source paths need to map into the portal container."
+        >
+          <textarea
+            value={pathRemappingsText}
+            onChange={(e) => setPathRemappingsText(e.target.value)}
+            className="min-h-28 w-full rounded-md border border-border bg-background px-3 py-2 font-mono text-xs"
+            spellCheck={false}
+          />
+        </Field>
+        <Field
+          label="Kindle SMTP config"
+          description="JSON object for Kindle email delivery, including host, port, username, password, from, and tls."
+        >
+          <textarea
+            value={kindleSMTPText}
+            onChange={(e) => setKindleSMTPText(e.target.value)}
+            className="min-h-28 w-full rounded-md border border-border bg-background px-3 py-2 font-mono text-xs"
+            spellCheck={false}
+          />
         </Field>
         <Field
           label="Default download provider"

@@ -216,22 +216,29 @@ func (s *Server) handleAdminGetBackend(w http.ResponseWriter, r *http.Request) {
 		"cache_dir":                      cfg.CacheDir,
 		"cache_max_size_gb":              cfg.CacheMaxSizeGB,
 		"cache_download_concurrency":     cfg.CacheDownloadConcurrency,
+		"path_remappings":                json.RawMessage(cfg.PathRemappings),
 		"opds_realm":                     cfg.OpdsRealm,
+		"kindle_smtp_config":             json.RawMessage(cfg.KindleSMTPConfig),
 		"kepubify_path":                  cfg.KepubifyPath,
+		"standalone_http_listen":         cfg.StandaloneHTTPListen,
 		"libraries":                      libs,
 	})
 }
 
 func (s *Server) handleAdminPatchBackend(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		TargetBackendPluginID    *string `json:"target_backend_plugin_id"`
-		TargetBackendInstallID   *string `json:"target_backend_installation_id"`
-		AutoApproveRequests      *bool   `json:"auto_approve_requests"`
-		DefaultStreamingMode     *string `json:"default_streaming_mode"`
-		CacheMaxSizeGB           *int    `json:"cache_max_size_gb"`
-		CacheDownloadConcurrency *int    `json:"cache_download_concurrency"`
-		OpdsRealm                *string `json:"opds_realm"`
-		KepubifyPath             *string `json:"kepubify_path"`
+		TargetBackendPluginID    *string          `json:"target_backend_plugin_id"`
+		TargetBackendInstallID   *string          `json:"target_backend_installation_id"`
+		AutoApproveRequests      *bool            `json:"auto_approve_requests"`
+		DefaultStreamingMode     *string          `json:"default_streaming_mode"`
+		CacheDir                 *string          `json:"cache_dir"`
+		CacheMaxSizeGB           *int             `json:"cache_max_size_gb"`
+		CacheDownloadConcurrency *int             `json:"cache_download_concurrency"`
+		PathRemappings           *json.RawMessage `json:"path_remappings"`
+		OpdsRealm                *string          `json:"opds_realm"`
+		KindleSMTPConfig         *json.RawMessage `json:"kindle_smtp_config"`
+		KepubifyPath             *string          `json:"kepubify_path"`
+		StandaloneHTTPListen     *string          `json:"standalone_http_listen"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeErr(w, 400, err.Error())
@@ -250,17 +257,29 @@ func (s *Server) handleAdminPatchBackend(w http.ResponseWriter, r *http.Request)
 	if body.DefaultStreamingMode != nil {
 		cur.DefaultStreamingMode = *body.DefaultStreamingMode
 	}
+	if body.CacheDir != nil {
+		cur.CacheDir = *body.CacheDir
+	}
 	if body.CacheMaxSizeGB != nil {
 		cur.CacheMaxSizeGB = *body.CacheMaxSizeGB
 	}
 	if body.CacheDownloadConcurrency != nil {
 		cur.CacheDownloadConcurrency = *body.CacheDownloadConcurrency
 	}
+	if body.PathRemappings != nil {
+		cur.PathRemappings = []byte(*body.PathRemappings)
+	}
 	if body.OpdsRealm != nil {
 		cur.OpdsRealm = *body.OpdsRealm
 	}
+	if body.KindleSMTPConfig != nil {
+		cur.KindleSMTPConfig = []byte(*body.KindleSMTPConfig)
+	}
 	if body.KepubifyPath != nil {
 		cur.KepubifyPath = *body.KepubifyPath
+	}
+	if body.StandaloneHTTPListen != nil {
+		cur.StandaloneHTTPListen = *body.StandaloneHTTPListen
 	}
 	if err := s.deps.Store.UpsertConfig(r.Context(), cur); err != nil {
 		writeInternal(w, r, err)

@@ -120,40 +120,15 @@ func main() {
 		}
 		st := store.New(p)
 
-		// Seed backend_config defaults using runtime config values.
-		curCfg, _ := st.GetConfig(ctx)
-		if cfg.CacheDir != "" {
-			curCfg.CacheDir = cfg.CacheDir
+		if _, err := st.ImportLegacyConfig(ctx, storeConfigFromRuntimeConfig(cfg)); err != nil {
+			p.Close()
+			return fmt.Errorf("import legacy config: %w", err)
 		}
-		if cfg.CacheMaxSizeGB > 0 {
-			curCfg.CacheMaxSizeGB = cfg.CacheMaxSizeGB
+		appCfg, err := st.GetConfig(ctx)
+		if err != nil {
+			p.Close()
+			return fmt.Errorf("get config: %w", err)
 		}
-		if cfg.CacheDownloadConcurrency > 0 {
-			curCfg.CacheDownloadConcurrency = cfg.CacheDownloadConcurrency
-		}
-		if cfg.DefaultStreamingMode != "" {
-			curCfg.DefaultStreamingMode = cfg.DefaultStreamingMode
-		}
-		if cfg.KepubifyPath != "" {
-			curCfg.KepubifyPath = cfg.KepubifyPath
-		}
-		if cfg.OpdsRealm != "" {
-			curCfg.OpdsRealm = cfg.OpdsRealm
-		}
-		if len(cfg.KindleSMTPConfig) > 2 {
-			curCfg.KindleSMTPConfig = cfg.KindleSMTPConfig
-		}
-		if len(cfg.PathRemappings) > 2 {
-			curCfg.PathRemappings = cfg.PathRemappings
-		}
-		curCfg.AutoApproveRequests = cfg.AutoApproveRequests
-		if cfg.TargetBackendPluginID != "" {
-			curCfg.TargetBackendPluginID = cfg.TargetBackendPluginID
-		}
-		if cfg.TargetBackendInstallID != "" {
-			curCfg.TargetBackendInstallID = cfg.TargetBackendInstallID
-		}
-		_ = st.UpsertConfig(ctx, curCfg)
 
 		// HostHTTPClient — the portal-→backend proxy URL is the local host
 		// HTTP API. Operators set HOST_BASE_URL via env. The token is also
@@ -169,9 +144,9 @@ func main() {
 		ev := event.New(sdkruntime.Host(), logger.Named("event"))
 
 		var cacheMgr *streaming.Manager
-		if cfg.CacheDir != "" {
-			maxBytes := int64(cfg.CacheMaxSizeGB) * 1024 * 1024 * 1024
-			cacheMgr = streaming.NewManager(cfg.CacheDir, maxBytes, st)
+		if appCfg.CacheDir != "" {
+			maxBytes := int64(appCfg.CacheMaxSizeGB) * 1024 * 1024 * 1024
+			cacheMgr = streaming.NewManager(appCfg.CacheDir, maxBytes, st)
 		}
 
 		koboRefs := koboref.New()
@@ -180,7 +155,7 @@ func main() {
 			Store:        st,
 			Host:         host,
 			Ev:           ev,
-			CacheDir:     cfg.CacheDir,
+			CacheDir:     appCfg.CacheDir,
 			CacheManager: cacheMgr,
 			KoboRefs:     koboRefs,
 			WebFS:        web.FS(),
@@ -191,7 +166,7 @@ func main() {
 		// (e.g. ebooks.example.com → OPDS / kosync / Kobo / Kindle inbound).
 		// See standalone_http_listen in manifest.json. Bound once at first
 		// Configure; subsequent changes require a plugin restart.
-		if addr := cfg.StandaloneHTTPListen; addr != "" {
+		if addr := appCfg.StandaloneHTTPListen; addr != "" {
 			started := false
 			standaloneOnce.Do(func() {
 				started = true
@@ -226,7 +201,7 @@ func main() {
 			Host:         host,
 			Ev:           ev,
 			Log:          logger.Named("scheduler"),
-			CacheDir:     cfg.CacheDir,
+			CacheDir:     appCfg.CacheDir,
 			CacheManager: cacheMgr,
 			KoboRefs:     koboRefs,
 		})
@@ -234,7 +209,7 @@ func main() {
 		if old := poolPtr.Swap(p); old != nil {
 			old.Close()
 		}
-		logger.Info("configured", "cache_dir", cfg.CacheDir, "target_backend", cfg.TargetBackendPluginID)
+		logger.Info("configured", "cache_dir", appCfg.CacheDir, "target_backend", appCfg.BackendTarget())
 		return nil
 	})
 
@@ -286,4 +261,21 @@ func loadManifest() (*pluginv1.PluginManifest, error) {
 		}
 	}
 	return manifest, nil
+}
+
+func storeConfigFromRuntimeConfig(cfg pluginrt.Config) store.Config {
+	return store.Config{
+		TargetBackendPluginID:    cfg.TargetBackendPluginID,
+		TargetBackendInstallID:   cfg.TargetBackendInstallID,
+		AutoApproveRequests:      cfg.AutoApproveRequests,
+		DefaultStreamingMode:     cfg.DefaultStreamingMode,
+		CacheDir:                 cfg.CacheDir,
+		CacheMaxSizeGB:           cfg.CacheMaxSizeGB,
+		CacheDownloadConcurrency: cfg.CacheDownloadConcurrency,
+		PathRemappings:           cfg.PathRemappings,
+		OpdsRealm:                cfg.OpdsRealm,
+		KindleSMTPConfig:         cfg.KindleSMTPConfig,
+		KepubifyPath:             cfg.KepubifyPath,
+		StandaloneHTTPListen:     cfg.StandaloneHTTPListen,
+	}
 }
