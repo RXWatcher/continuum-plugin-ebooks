@@ -13,7 +13,7 @@ request workflow.
 - Continuum plugin host
 - Postgres schema for this plugin
 - At least one ebook backend such as local-ebooks or bookwarehouse-ebook
-- Optional request/download provider such as annas-archive-downloader
+- Optional request/download provider such as ebook-requests
 
 ## Setup Checklist
 

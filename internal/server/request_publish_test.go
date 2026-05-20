@@ -56,13 +56,13 @@ func TestPublishRequestSubmittedFallsBackToBroadcast(t *testing.T) {
 	pub := &fakeEventPublisher{}
 	publishRequestSubmitted(context.Background(), pub, store.Request{
 		ID:             "req-1",
-		TargetPluginID: "continuum.annas-archive-downloader",
+		TargetPluginID: "continuum.ebook-requests",
 	})
 
 	if pub.name != "request_submitted" {
 		t.Fatalf("name = %q", pub.name)
 	}
-	if pub.payload["target_plugin_id"] != "continuum.annas-archive-downloader" {
+	if pub.payload["target_plugin_id"] != "continuum.ebook-requests" {
 		t.Fatalf("payload target = %+v", pub.payload)
 	}
 }

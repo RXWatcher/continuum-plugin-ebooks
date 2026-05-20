@@ -36,7 +36,7 @@ The portal is separate from ebook source providers:
   surfaces, caching, and user workflows.
 - Source providers such as `continuum.local-ebooks` or
   `continuum.bookwarehouse-ebook` own catalog and file access.
-- Download providers such as `continuum.annas-archive-downloader` can be
+- Download providers such as `continuum.ebook-requests` can be
   selected as request targets.
 
 ## Configuration
