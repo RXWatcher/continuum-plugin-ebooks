@@ -9,9 +9,12 @@ import {
   Mail,
   Plus,
   Smartphone,
+  Sparkles,
   Trash2,
   XCircle,
 } from "lucide-react";
+import { AtmosphereToggle, useAtmosphereEnabled } from "@/components/AtmosphereOverlay";
+import { useEinkMode } from "@/hooks/useEinkMode";
 import {
   checkHardcoverAuth,
   checkReadwiseAuth,
@@ -69,12 +72,48 @@ export default function Settings() {
           Manage your devices, integrations, and notification preferences.
         </p>
       </header>
+      <DisplayPreferencesCard />
       <EreaderDevicesCard />
       <ReadwiseCard />
       <HardcoverCard />
       <ShareLinksCard />
       <NotificationPrefsCard />
     </div>
+  );
+}
+
+function DisplayPreferencesCard() {
+  const [atmosphereEnabled] = useAtmosphereEnabled();
+  const [einkMode, setEinkMode] = useEinkMode();
+  return (
+    <Card className="bg-surface p-4">
+      <div className="mb-4 flex items-center gap-2">
+        <Sparkles className="size-5" />
+        <h3 className="font-medium">Display</h3>
+      </div>
+      <div className="space-y-3">
+        <div className="bg-background flex items-center justify-between rounded-md border border-dashed p-3">
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-medium">Atmosphere mode</div>
+            <div className="text-muted-foreground text-xs">
+              Animated cover-tinted gradient on book detail pages.
+              Currently {atmosphereEnabled ? "on" : "off"}.
+            </div>
+          </div>
+          <AtmosphereToggle />
+        </div>
+        <div className="bg-background flex items-center justify-between rounded-md border border-dashed p-3">
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-medium">E-ink mode</div>
+            <div className="text-muted-foreground text-xs">
+              Strips animations, transitions, and shadows so the UI plays
+              nicely with reMarkable / Boox e-reader browsers.
+            </div>
+          </div>
+          <Switch checked={einkMode} onCheckedChange={setEinkMode} />
+        </div>
+      </div>
+    </Card>
   );
 }
 
