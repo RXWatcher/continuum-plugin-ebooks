@@ -15,7 +15,9 @@ import {
   Copy,
   Download,
   Focus,
+  BookOpen,
   Highlighter,
+  Languages,
   ListTree,
   Maximize2,
   Moon,
@@ -50,6 +52,8 @@ import {
   type ExternalReaderProgress,
 } from "@/lib/api";
 import CustomFontUploader from "@/components/CustomFontUploader";
+import DefinePopover from "@/components/DefinePopover";
+import TranslatePopover from "@/components/TranslatePopover";
 import { Button } from "@/components/ui/button";
 import {
   ReadestLiteReader,
@@ -238,6 +242,39 @@ export default function Reader() {
     queryFn: () => listAnnotations(id),
     enabled: !!id,
   });
+
+  // Define / Translate popovers. Each holds the selected text +
+  // a position; the popover component does its own data fetch so
+  // a slow lookup doesn't block the reader UI.
+  const [definePopover, setDefinePopover] = useState<{ word: string } | null>(
+    null,
+  );
+  const [translatePopover, setTranslatePopover] = useState<{ text: string } | null>(
+    null,
+  );
+
+  const defineSelection = () => {
+    const selection =
+      readerSelection ?? readerRef.current?.createSelectionAnnotation();
+    const text = (selection?.selectedText ?? "").trim();
+    if (!text) return;
+    // Define is per-word; trim to the first whitespace-delimited
+    // token. Server tolerates multi-word inputs but Wiktionary
+    // doesn't index them.
+    const word = text.split(/\s+/, 1)[0]?.replace(/[^\p{L}\p{N}'-]/gu, "") ?? "";
+    if (!word) return;
+    setDefinePopover({ word });
+    readerRef.current?.clearSelection();
+  };
+
+  const translateSelection = () => {
+    const selection =
+      readerSelection ?? readerRef.current?.createSelectionAnnotation();
+    const text = (selection?.selectedText ?? "").trim();
+    if (!text) return;
+    setTranslatePopover({ text });
+    readerRef.current?.clearSelection();
+  };
 
   // Custom fonts — the user's uploaded TTF / OTF / WOFF files. We
   // inject one @font-face rule per font into a style tag so the
@@ -2332,7 +2369,35 @@ export default function Reader() {
           >
             <Volume2 className="size-4" />
           </Button>
+          <Button
+            size="icon"
+            variant="ghost"
+            onClick={() => defineSelection()}
+            aria-label="Define selected word"
+          >
+            <BookOpen className="size-4" />
+          </Button>
+          <Button
+            size="icon"
+            variant="ghost"
+            onClick={() => translateSelection()}
+            aria-label="Translate selection"
+          >
+            <Languages className="size-4" />
+          </Button>
         </div>
+      ) : null}
+      {definePopover ? (
+        <DefinePopover
+          word={definePopover.word}
+          onClose={() => setDefinePopover(null)}
+        />
+      ) : null}
+      {translatePopover ? (
+        <TranslatePopover
+          text={translatePopover.text}
+          onClose={() => setTranslatePopover(null)}
+        />
       ) : null}
       {readingRuler ? (
         <div
