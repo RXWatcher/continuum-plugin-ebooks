@@ -76,6 +76,12 @@ type Props = {
   annotations?: Annotation[];
   bookID: string;
   format: string;
+  /**
+   * Portal-signed URL for the book's file bytes. When set, the reader
+   * fetches via this URL (no Authorization header needed; signed ?token=
+   * carries auth). When undefined, falls back to the portal proxy endpoint.
+   */
+  fileUrl?: string;
   settings?: {
     flow?: "paginated" | "scrolled";
     fontFamily?: string;
@@ -166,6 +172,7 @@ export const ReadestLiteReader = forwardRef<ReadestLiteReaderHandle, Props>(
       annotations = [],
       bookID,
       format,
+      fileUrl,
       onContentPopup,
       onDiagnostic,
       onReady,
@@ -584,7 +591,7 @@ export const ReadestLiteReader = forwardRef<ReadestLiteReaderHandle, Props>(
       async function open() {
         try {
           const [file, config] = await Promise.all([
-            service.loadBookContent(bookID, format),
+            service.loadBookContent(bookID, format, fileUrl),
             service.loadBookConfig(bookID),
           ]);
           emitDiagnostic("info", `Loaded ${format.toUpperCase()} source`);

@@ -14,6 +14,7 @@ package streaming
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"strconv"
 
 	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/store"
 )
@@ -28,10 +29,13 @@ func ResolveMode(cfg store.Config) string {
 	return "proxy"
 }
 
-// ComputeCacheKey hashes the (bookID, format, installID) tuple to a stable
-// per-(book,format,backend) cache key. Different backends serving the same
-// logical book MUST hash differently because their bytes can differ.
-func ComputeCacheKey(bookID, format, installID string) string {
-	h := sha256.Sum256([]byte(bookID + "|" + format + "|" + installID))
+// ComputeCacheKey hashes the (bookID, installID, libraryID) tuple to a
+// stable cache key. libraryID is included so two portal libraries pointing
+// at the same backend never collide on the same book id — their permissions
+// may differ and a cache hit must not cross library boundaries. Format is
+// no longer keyed because both supported backends store a single file per
+// book row and ignore format on the byte route.
+func ComputeCacheKey(bookID, installID string, libraryID int64) string {
+	h := sha256.Sum256([]byte(bookID + "|" + installID + "|" + strconv.FormatInt(libraryID, 10)))
 	return hex.EncodeToString(h[:])
 }

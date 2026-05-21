@@ -46,9 +46,21 @@ function OPDSSection() {
   return (
     <section>
       <h2 className="mb-2 text-base font-semibold">OPDS feed</h2>
+      <div className="mb-3 space-y-2 rounded-md border border-border bg-muted/40 p-3 text-sm text-muted-foreground">
+        <p>
+          OPDS tokens act as device-scoped passwords for external readers like
+          KOReader, FBReader, or Calibre Companion. Create one token per
+          device — you can revoke them individually if a device is lost.
+        </p>
+        <p className="text-xs">
+          The password is shown <strong>once</strong> right after creation and
+          never again. Save it in your reader app immediately; lose it and
+          you'll have to revoke + create a new one.
+        </p>
+      </div>
       <p className="mb-3 text-sm text-muted-foreground">
-        Generate a per-device password for the OPDS feed. Use your username +
-        the shown password in your reader app.
+        Use your portal username as the OPDS username and the generated token
+        as the password.
       </p>
       <form
         onSubmit={(e) => {

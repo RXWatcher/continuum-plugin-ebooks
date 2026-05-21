@@ -3,7 +3,10 @@ package backend
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/url"
+
+	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/mediatoken"
 )
 
 // Capabilities mirrors the backend /capabilities response shape.
@@ -164,14 +167,49 @@ func (b *EbookBackend) GetBook(ctx context.Context, bookID string) (EbookDetail,
 	return d, nil
 }
 
-// FileURL constructs the host-proxy URL for the file fetch endpoint (the
-// portal's streaming layer hits this).
-func (b *EbookBackend) FilePath(bookID, format string) string {
-	return fmt.Sprintf("/api/v1/file/%s?format=%s", url.PathEscape(bookID), url.QueryEscape(format))
+// FilePath returns the backend-relative file route. Both supported ebook
+// backends store a single file per book and ignore any ?format= query, so
+// the URL doesn't carry format — callers that need the format string for
+// display read it from EbookFile.Format on the catalog response.
+func (b *EbookBackend) FilePath(bookID string) string {
+	return "/api/v1/file/" + url.PathEscape(bookID)
+}
+
+// SignedFilePath returns FilePath with a signed media token appended as
+// ?token=. Use this for portal server-side fetches via host.GetStream; the
+// backend's public file route verifies the token. Returns the unsigned path
+// (which the backend will reject) when secret or userID is empty so the
+// caller surfaces "secret not configured" instead of a silent auth bypass.
+func (b *EbookBackend) SignedFilePath(userID, bookID, secret string) string {
+	base := b.FilePath(bookID)
+	if secret == "" || userID == "" {
+		return base
+	}
+	tok, err := mediatoken.Mint(secret, userID, bookID, mediatoken.FileFileIdx)
+	if err != nil {
+		slog.Warn("mint file token failed", "book_id", bookID, "err", err)
+		return base
+	}
+	return base + "?token=" + url.QueryEscape(tok)
 }
 
 func (b *EbookBackend) CoverPath(bookID, size string) string {
 	return fmt.Sprintf("/api/v1/cover/%s/%s", url.PathEscape(bookID), url.PathEscape(size))
+}
+
+// SignedCoverPath returns CoverPath with a signed media token appended for
+// portal server-side cover fetches (mostly used by Kobo/Kindle integrations).
+func (b *EbookBackend) SignedCoverPath(userID, bookID, size, secret string) string {
+	base := b.CoverPath(bookID, size)
+	if secret == "" || userID == "" {
+		return base
+	}
+	tok, err := mediatoken.Mint(secret, userID, bookID, mediatoken.CoverFileIdx)
+	if err != nil {
+		slog.Warn("mint cover token failed", "book_id", bookID, "err", err)
+		return base
+	}
+	return base + "?token=" + url.QueryEscape(tok)
 }
 
 // FacetItem mirrors the upstream Author/Series/Genre shape returned by

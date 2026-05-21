@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Users } from "lucide-react";
 import { Link, useSearchParams } from "react-router";
 import { browseAuthors, type FacetItem, type PageEnvelope } from "@/lib/api";
-import { Button } from "@/components/ui/button";
+import InfiniteFooter from "@/components/InfiniteFooter";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export default function Authors() {
@@ -47,17 +47,12 @@ export default function Authors() {
       ) : (
         <>
           <FacetGrid items={items} libraryID={libraryID} />
-          {nextCursor && (
-            <div className="flex justify-center pt-2">
-              <Button
-                variant="outline"
-                disabled={q.isFetching}
-                onClick={() => setCursor(nextCursor)}
-              >
-                {q.isFetching ? "Loading..." : "Load more"}
-              </Button>
-            </div>
-          )}
+          <InfiniteFooter
+            hasNextPage={Boolean(nextCursor)}
+            isFetchingNextPage={q.isFetching && pages.length > 0}
+            fetchNextPage={() => setCursor(nextCursor)}
+            label="authors"
+          />
         </>
       )}
     </div>

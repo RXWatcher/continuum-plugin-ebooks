@@ -26,7 +26,12 @@ type Config struct {
 	KindleSMTPConfig         []byte
 	KepubifyPath             string
 	StandaloneHTTPListen     string
-	UpdatedAt                time.Time
+	// MediaSigningSecret is the HMAC key the portal signs media URL tokens
+	// with. Backend plugins (bw-ebook, local-ebooks) must hold the same
+	// secret in their stream_signing_secret field. Stored as base64; the
+	// portal/back end accept both base64 and raw bytes at verify time.
+	MediaSigningSecret string
+	UpdatedAt          time.Time
 }
 
 func (c Config) BackendInstallID() string {
@@ -95,7 +100,7 @@ func (s *Store) GetConfig(ctx context.Context) (Config, error) {
 		       auto_approve_requests, default_streaming_mode,
 		       COALESCE(cache_dir,''), cache_max_size_gb, cache_download_concurrency,
 		       path_remappings, kosync_secret, opds_realm, kindle_smtp_config,
-		       kepubify_path, standalone_http_listen, updated_at
+		       kepubify_path, standalone_http_listen, COALESCE(media_signing_secret,''), updated_at
 		FROM backend_config WHERE id = 1
 	`)
 	var c Config
@@ -103,7 +108,7 @@ func (s *Store) GetConfig(ctx context.Context) (Config, error) {
 		&c.AutoApproveRequests, &c.DefaultStreamingMode,
 		&c.CacheDir, &c.CacheMaxSizeGB, &c.CacheDownloadConcurrency,
 		&c.PathRemappings, &c.KosyncSecret, &c.OpdsRealm, &c.KindleSMTPConfig,
-		&c.KepubifyPath, &c.StandaloneHTTPListen, &c.UpdatedAt); err != nil {
+		&c.KepubifyPath, &c.StandaloneHTTPListen, &c.MediaSigningSecret, &c.UpdatedAt); err != nil {
 		if !errors.Is(err, pgx.ErrNoRows) {
 			return Config{}, fmt.Errorf("get config: %w", err)
 		}
@@ -135,8 +140,8 @@ func (s *Store) UpsertConfig(ctx context.Context, c Config) error {
 	_, err := s.pool.Exec(ctx, `
 		INSERT INTO backend_config (id, target_backend_plugin_id, target_backend_installation_id, auto_approve_requests,
 			default_streaming_mode, cache_dir, cache_max_size_gb, cache_download_concurrency,
-			path_remappings, kosync_secret, opds_realm, kindle_smtp_config, kepubify_path, standalone_http_listen, updated_at)
-		VALUES (1, $1, $2, $3, $4, NULLIF($5,''), $6, $7, $8, $9, $10, $11, $12, $13, now())
+			path_remappings, kosync_secret, opds_realm, kindle_smtp_config, kepubify_path, standalone_http_listen, media_signing_secret, updated_at)
+		VALUES (1, $1, $2, $3, $4, NULLIF($5,''), $6, $7, $8, $9, $10, $11, $12, $13, NULLIF($14,''), now())
 		ON CONFLICT (id) DO UPDATE SET
 			target_backend_plugin_id   = EXCLUDED.target_backend_plugin_id,
 			target_backend_installation_id = EXCLUDED.target_backend_installation_id,
@@ -151,10 +156,11 @@ func (s *Store) UpsertConfig(ctx context.Context, c Config) error {
 			kindle_smtp_config         = EXCLUDED.kindle_smtp_config,
 			kepubify_path              = EXCLUDED.kepubify_path,
 			standalone_http_listen     = EXCLUDED.standalone_http_listen,
+			media_signing_secret       = COALESCE(EXCLUDED.media_signing_secret, backend_config.media_signing_secret),
 			updated_at                 = now()
 	`, c.TargetBackendPluginID, c.TargetBackendInstallID, c.AutoApproveRequests, c.DefaultStreamingMode,
 		c.CacheDir, c.CacheMaxSizeGB, c.CacheDownloadConcurrency,
-		c.PathRemappings, c.KosyncSecret, c.OpdsRealm, c.KindleSMTPConfig, c.KepubifyPath, c.StandaloneHTTPListen)
+		c.PathRemappings, c.KosyncSecret, c.OpdsRealm, c.KindleSMTPConfig, c.KepubifyPath, c.StandaloneHTTPListen, c.MediaSigningSecret)
 	if err != nil {
 		return fmt.Errorf("upsert config: %w", err)
 	}

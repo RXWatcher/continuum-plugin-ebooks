@@ -1,10 +1,8 @@
 package streaming
 
 import (
-	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 
 	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/backend"
 )
@@ -13,13 +11,16 @@ import (
 // Hop-by-hop headers are stripped; everything else (Content-Type,
 // Content-Length, Content-Range, Accept-Ranges, ETag, …) is preserved so the
 // portal is transparent for client-side range requests.
-func ProxyStream(w http.ResponseWriter, r *http.Request, host *backend.HostHTTPClient, installID, bookID, format string) {
+//
+// upstreamPath is the backend-relative URL the portal hits, with any
+// authentication already baked in (typically a signed ?token= produced by
+// EbookBackend.SignedFilePath). The host plugin proxy validates the token —
+// the portal here is a pure byte forwarder.
+func ProxyStream(w http.ResponseWriter, r *http.Request, host *backend.HostHTTPClient, installID, upstreamPath string) {
 	if installID == "" {
 		http.Error(w, "no backend installed", http.StatusServiceUnavailable)
 		return
 	}
-	upstreamPath := fmt.Sprintf("/api/v1/file/%s?format=%s",
-		url.PathEscape(bookID), url.QueryEscape(format))
 	headers := map[string]string{}
 	if rng := r.Header.Get("Range"); rng != "" {
 		headers["Range"] = rng

@@ -3,11 +3,16 @@ import { BookOpen } from "lucide-react";
 import { mountPath, type EbookSummary } from "@/lib/api";
 
 export function BookCard({ book }: { book: EbookSummary }) {
-  // Cover URL: backends return either an absolute URL or a relative path on
-  // their /cover/ endpoint. We rewrite relative paths through the plugin
-  // proxy so the browser can fetch them.
+  // Cover URL: backends now return a portal-signed absolute path that
+  // routes directly through the host plugin proxy
+  // (`/api/v1/plugins/{backend_id}/api/v1/cover/...?token=...`). Older
+  // backends emit a path relative to *their* root (no `/api/v1/plugins/`
+  // prefix), which the portal still needs to wrap via mountPath. Anything
+  // already absolute (http: or `/api/v1/plugins/`) goes through unchanged
+  // — double-wrapping turns `/api/v1/plugins/39/...` into
+  // `/api/v1/plugins/44/api/v1/plugins/39/...` and the host router 404s.
   const cover = book.cover_url
-    ? book.cover_url.startsWith("http")
+    ? /^(https?:|\/api\/v1\/plugins\/)/.test(book.cover_url)
       ? book.cover_url
       : `${mountPath()}${book.cover_url}`
     : "";

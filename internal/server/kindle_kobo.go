@@ -72,7 +72,7 @@ func (s *Server) handleSendToKobo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	bk := backend.NewEbookBackend(s.deps.Host, lib.BackendPluginID)
-	resp, err := s.deps.Host.GetStream(r.Context(), lib.BackendPluginID, bk.FilePath(bookID, "epub"), nil)
+	resp, err := s.deps.Host.GetStream(r.Context(), lib.BackendPluginID, bk.SignedFilePath(id.UserID, bookID, cfg.MediaSigningSecret), nil)
 	if err != nil {
 		writeBadGateway(w, r, err)
 		return

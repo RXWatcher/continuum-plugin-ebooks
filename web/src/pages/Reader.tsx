@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useScreenWakeLock } from "@/hooks/useScreenWakeLock";
+import { useEinkMode } from "@/hooks/useEinkMode";
 import { Link, useParams } from "react-router";
 import { useQuery } from "@tanstack/react-query";
+import { toast } from "sonner";
 import {
   ArrowLeft,
   ArrowRight,
@@ -56,6 +59,7 @@ import {
   type ReaderSelection,
 } from "@/reader/ReadestLiteReader";
 import type { TOCItem } from "@/reader/readest/libs/document";
+import { CFI } from "@/reader/readest/libs/document";
 
 type ReaderPanelTab = "toc" | "search" | "notes" | "bookmarks" | "settings";
 type HighlightStyle = "highlight" | "underline" | "squiggly";
@@ -64,12 +68,54 @@ type ReaderFlow = "paginated" | "scrolled";
 type WritingMode = "auto" | "horizontal-tb" | "vertical-rl";
 type QuickAction = "highlight" | "note" | "search" | "speak";
 
+// Softer highlight palette than the default tailwind 400 family — those
+// shades are too saturated on a white page and harsh against dark themes.
+// These are tailwind 300/200-equivalent: still legible, much friendlier.
 const highlightColors = [
-  { label: "Yellow", value: "#facc15" },
-  { label: "Red", value: "#f87171" },
-  { label: "Green", value: "#86efac" },
-  { label: "Blue", value: "#93c5fd" },
-  { label: "Violet", value: "#c4b5fd" },
+  { label: "Yellow", value: "#f4d03f" },
+  { label: "Coral", value: "#fca5a5" },
+  { label: "Mint", value: "#a7f3d0" },
+  { label: "Sky", value: "#bae6fd" },
+  { label: "Lavender", value: "#ddd6fe" },
+];
+
+// Reader presets give users a one-click way to set sensible typography
+// without dragging four sliders. Each preset bumps fontFamily, lineHeight,
+// and (where it matters) margins. Picked from typical "long-form reading"
+// recommendations: 1.7–1.9 line-height + generous margins reduce eye strain.
+type ReaderPreset = {
+  id: 'comfortable' | 'accessible' | 'compact';
+  label: string;
+  description: string;
+  fontFamily: string;
+  fontSize: number;
+  lineHeight: number;
+};
+const readerPresets: ReaderPreset[] = [
+  {
+    id: 'comfortable',
+    label: 'Comfortable',
+    description: 'Serif, generous spacing — good for novels',
+    fontFamily: 'Merriweather, Georgia, serif',
+    fontSize: 110,
+    lineHeight: 1.8,
+  },
+  {
+    id: 'accessible',
+    label: 'Accessible',
+    description: 'Larger text, looser leading, sans-serif',
+    fontFamily: 'system-ui, sans-serif',
+    fontSize: 125,
+    lineHeight: 1.95,
+  },
+  {
+    id: 'compact',
+    label: 'Compact',
+    description: 'Tighter — fits more text per page',
+    fontFamily: 'serif',
+    fontSize: 95,
+    lineHeight: 1.55,
+  },
 ];
 
 const highlightStyles: Array<{ label: string; value: HighlightStyle }> = [
@@ -80,21 +126,44 @@ const highlightStyles: Array<{ label: string; value: HighlightStyle }> = [
 
 const globalReaderDefaultsKey = "continuum-ebooks-reader-defaults";
 
+// clipExcerpt trims foliate-js search-result excerpt segments so cards stay
+// scannable. "lead" trims from the front (showing the tail of pre-match
+// context near the highlight); "trail" trims from the end. Single-purpose
+// helper keeps the JSX above readable.
+function clipExcerpt(s: string | undefined | null, max: number, side: "lead" | "trail"): string {
+  if (!s) return "";
+  if (s.length <= max) return s;
+  return side === "lead" ? "…" + s.slice(s.length - max) : s.slice(0, max) + "…";
+}
+
 export default function Reader() {
+  // Screen wake-lock — keeps the device screen on while the reader
+  // page is mounted. Hook silently no-ops on browsers without the
+  // Wake Lock API. Released automatically on unmount.
+  useScreenWakeLock(true);
+  // E-ink mode persists in localStorage; the hook installs the body
+  // class so the global stylesheet can disable animations / blurs.
+  // We don't expose the toggle in the reader chrome yet — users
+  // bootstrap by setting localStorage.ebooks.eink.enabled = "true"
+  // (or via the settings panel once we wire one).
+  useEinkMode();
+
   const params = useParams();
   const id = params.id ?? "";
   const readerRef = useRef<ReadestLiteReaderHandle | null>(null);
   const [pct, setPct] = useState(0);
   const [scrubPct, setScrubPct] = useState(0);
   const [currentSection, setCurrentSection] = useState("");
-  const [fontSize, setFontSize] = useState(100);
+  // New default matches the "Comfortable" preset — better long-form reading
+  // out of the box. Persisted preferences override these on mount.
+  const [fontSize, setFontSize] = useState(110);
   const [theme, setTheme] = useState<ReaderTheme>("light");
   const [spread, setSpread] = useState<"auto" | "none">("auto");
   const [flow, setFlow] = useState<ReaderFlow>("paginated");
-  const [fontFamily, setFontFamily] = useState("serif");
+  const [fontFamily, setFontFamily] = useState("Merriweather, Georgia, serif");
   const [fontWeight, setFontWeight] = useState(400);
   const [hyphenation, setHyphenation] = useState(true);
-  const [lineHeight, setLineHeight] = useState(1.6);
+  const [lineHeight, setLineHeight] = useState(1.8);
   const [margin, setMargin] = useState(24);
   const [maxWidth, setMaxWidth] = useState(72);
   const [paragraphFocus, setParagraphFocus] = useState(false);
@@ -118,7 +187,7 @@ export default function Reader() {
     useState<ReaderSelection | null>(null);
   const [highlightStyle, setHighlightStyle] =
     useState<HighlightStyle>("highlight");
-  const [highlightColor, setHighlightColor] = useState("#facc15");
+  const [highlightColor, setHighlightColor] = useState("#f4d03f");
   const [customHighlightColors, setCustomHighlightColors] = useState<string[]>(
     [],
   );
@@ -171,12 +240,11 @@ export default function Reader() {
   useEffect(() => {
     const files = detail.data?.files ?? [];
     if (!files.length) return;
+    // Prefer EPUB (the only format the inline reader actually supports). If
+    // the book ships only PDF/CBZ/etc., default to the first available format
+    // — the reader page detects that and shows a download-to-read panel.
     const preferred =
-      files.find((file) => file.format.toLowerCase() === "epub") ??
-      files.find((file) =>
-        ["pdf", "cbz", "cbr"].includes(file.format.toLowerCase()),
-      ) ??
-      files[0];
+      files.find((file) => file.format.toLowerCase() === "epub") ?? files[0];
     setSelectedFormat(preferred.format.toLowerCase());
   }, [detail.data?.files]);
 
@@ -270,42 +338,64 @@ export default function Reader() {
     };
   }, [id]);
 
+  // Show a one-time "Progress saved" toast on the first successful save after
+  // the reader mounts. Subsequent saves are silent — toasts every 500ms would
+  // be noise. The flag resets when the book id changes.
+  const firstSaveToastedRef = useRef(false);
+  useEffect(() => {
+    firstSaveToastedRef.current = false;
+  }, [id]);
   useEffect(() => {
     if (!id || !settingsLoaded) return;
     const timeout = window.setTimeout(() => {
-      void getReaderConfig(id).then((envelope) => {
-        const persistedConfig = { ...(envelope.config ?? {}) };
-        delete persistedConfig.externalProgress;
-        return putReaderConfig(id, {
-          ...persistedConfig,
-          viewSettings: {
-            ...((envelope.config?.viewSettings ?? {}) as Record<
-              string,
-              unknown
-            >),
-            flow,
-            fontFamily,
-            fontSize,
-            fontWeight,
-            customHighlightColors,
-            hyphenation,
-            lineHeight,
-            margin,
-            maxWidth,
-            paragraphFocus,
-            quickAction,
-            readingRuler,
-            rtl,
-            spread,
-            theme,
-            ttsRate,
-            ttsSleepMinutes,
-            ttsVoice,
-            writingMode,
-            zoom,
-          },
+      void getReaderConfig(id)
+        .then((envelope) => {
+          const persistedConfig = { ...(envelope.config ?? {}) };
+          delete persistedConfig.externalProgress;
+          return putReaderConfig(id, {
+            ...persistedConfig,
+            viewSettings: {
+              ...((envelope.config?.viewSettings ?? {}) as Record<
+                string,
+                unknown
+              >),
+              flow,
+              fontFamily,
+              fontSize,
+              fontWeight,
+              customHighlightColors,
+              hyphenation,
+              lineHeight,
+              margin,
+              maxWidth,
+              paragraphFocus,
+              quickAction,
+              readingRuler,
+              rtl,
+              spread,
+              theme,
+              ttsRate,
+              ttsSleepMinutes,
+              ttsVoice,
+              writingMode,
+              zoom,
+            },
+          });
+        })
+        .then(() => {
+          if (!firstSaveToastedRef.current) {
+            firstSaveToastedRef.current = true;
+            toast.success('Progress saved — autosaving as you read');
+          }
+        })
+        .catch(() => {
+          // Save failed: tell the user once so they know their position
+          // might not persist (we keep retrying every change).
+          if (!firstSaveToastedRef.current) {
+            firstSaveToastedRef.current = true;
+            toast.error('Could not save reading progress');
+          }
         });
-      });
     }, 500);
     return () => window.clearTimeout(timeout);
   }, [
@@ -353,19 +443,33 @@ export default function Reader() {
 
   const handleDiagnostic = useCallback((entry: ReaderDiagnostic) => {
     setDiagnostics((items) => [entry, ...items].slice(0, 25));
+    // Until now error-level diagnostics were silently appended to a buried
+    // panel section, so a user whose font failed to load or whose annotation
+    // restore broke saw no feedback. Surface those via toast; warnings stay
+    // quiet because they're noisier and the panel still shows the full log.
+    if (entry.level === "error") {
+      toast.error(`Reader: ${entry.message}`);
+    }
   }, []);
 
-  const fileURL = `${mountPath()}/api/v1/me/books/${encodeURIComponent(id)}/file?format=${encodeURIComponent(selectedFormat)}`;
+  // Prefer the portal-signed file URL from detail.files[].url — it embeds a
+  // short-TTL token that lets the reader fetch bytes without sending an
+  // Authorization header. Fall back to the portal proxy endpoint for
+  // back-compat with backends that don't yet emit stream_url.
+  const fileURL =
+    detail.data?.files?.find(
+      (file) => file.format.toLowerCase() === selectedFormat,
+    )?.url ??
+    `${mountPath()}/api/v1/me/books/${encodeURIComponent(id)}/file?format=${encodeURIComponent(selectedFormat)}`;
   const normalizedFormat = selectedFormat.toLowerCase();
-  const unsupportedInlineFormats = new Set(["rar"]);
+  // Only EPUB renders inline via foliate-js. PDF, comic-book archives, and
+  // anything else fall through to the "download to read elsewhere" panel
+  // (previously the reader would mount, fail silently, and show a useless
+  // "Open file" link). Once PDF.js / comic rendering is built, expand this
+  // set and the reader UI can pick the right viewer.
+  const inlineSupportedFormats = new Set(["epub"]);
   const canUseReader =
-    !!selectedFormat && !unsupportedInlineFormats.has(normalizedFormat);
-  const readerMode =
-    normalizedFormat === "pdf"
-      ? "PDF"
-      : ["cbz", "cbr", "zip"].includes(normalizedFormat)
-        ? "Comic"
-        : "Book";
+    !!selectedFormat && inlineSupportedFormats.has(normalizedFormat);
 
   const saveNote = async () => {
     if (!noteText.trim()) return;
@@ -944,24 +1048,70 @@ export default function Reader() {
           .includes(noteSearchTerm.trim().toLowerCase()),
       )
     : noteItems;
+  // Group notes/highlights by the TOC entry they fall into so the panel reads
+  // like an outline rather than a flat dump. foliate-js writes a `cfi` on each
+  // TOC item at load time; we flatten the tree, sort by CFI, then for each
+  // annotation pick the latest TOC entry whose CFI <= the annotation's start.
+  const flatToc: { label: string; cfi: string }[] = [];
+  const walkToc = (items: TOCItem[]) => {
+    for (const item of items) {
+      if (item.cfi) flatToc.push({ label: item.label, cfi: item.cfi });
+      if (item.subitems?.length) walkToc(item.subitems);
+    }
+  };
+  walkToc(toc);
+  try {
+    flatToc.sort((a, b) => CFI.compare(a.cfi, b.cfi));
+  } catch {
+    // CFI.compare throws on malformed input; skip sort and fall through to the
+    // "Unknown chapter" bucket rather than break the panel.
+  }
+  const chapterFor = (cfi: string): string => {
+    if (!flatToc.length || !cfi) return "Unknown chapter";
+    let label = flatToc[0].label;
+    try {
+      for (const entry of flatToc) {
+        if (CFI.compare(entry.cfi, cfi) <= 0) label = entry.label;
+        else break;
+      }
+    } catch {
+      return "Unknown chapter";
+    }
+    return label;
+  };
+  const noteGroups: { label: string; items: typeof filteredNoteItems }[] = [];
+  for (const annotation of filteredNoteItems) {
+    const label = chapterFor(annotation.cfi_range);
+    const bucket = noteGroups.find((g) => g.label === label);
+    if (bucket) bucket.items.push(annotation);
+    else noteGroups.push({ label, items: [annotation] });
+  }
   const allHighlightColors = [
     ...highlightColors,
     ...customHighlightColors.map((value) => ({ label: value, value })),
   ];
 
-  const toolbarStyle = readerSelection
-    ? {
-        left: `${Math.min(
-          Math.max(
-            readerSelection.rect.left + readerSelection.rect.width / 2,
-            180,
-          ),
-          window.innerWidth - 180,
-        )}px`,
-        top: `${Math.max(readerSelection.rect.top - 58, 72)}px`,
-        transform: "translateX(-50%)",
-      }
-    : undefined;
+  // On phones the floating toolbar lands under the on-screen keyboard or off
+  // the right edge in landscape. Detect the narrow viewport and skip the
+  // computed style — the className pins the bar to the bottom of the viewport
+  // and lets controls wrap. Above sm: keep the original "floats near the
+  // selection" behavior since there's room.
+  const isNarrowViewport =
+    typeof window !== "undefined" && window.innerWidth < 640;
+  const toolbarStyle =
+    readerSelection && !isNarrowViewport
+      ? {
+          left: `${Math.min(
+            Math.max(
+              readerSelection.rect.left + readerSelection.rect.width / 2,
+              180,
+            ),
+            window.innerWidth - 180,
+          )}px`,
+          top: `${Math.max(readerSelection.rect.top - 58, 72)}px`,
+          transform: "translateX(-50%)",
+        }
+      : undefined;
 
   return (
     <div className="-mx-4 -my-2 flex h-[calc(100dvh-3.5rem)] flex-col md:-mx-6 lg:-mx-8">
@@ -1058,6 +1208,7 @@ export default function Reader() {
               variant={readingRuler ? "secondary" : "ghost"}
               onClick={() => setReadingRuler((value) => !value)}
               aria-label="Toggle reading ruler"
+              title="Reading ruler — dims everything except the current line, useful for focus"
             >
               <Ruler className="size-4" />
             </Button>
@@ -1163,21 +1314,9 @@ export default function Reader() {
           </>
         )}
       </header>
-      {(externalProgress || readerMode !== "Book" || readaloudAvailable) && (
+      {(externalProgress || readaloudAvailable) && (
         <div className="flex flex-wrap items-center gap-2 border-b border-border bg-muted/40 px-4 py-2 text-xs text-muted-foreground">
-          <span className="font-medium text-foreground">{readerMode} mode</span>
-          {readerMode === "PDF" ? (
-            <span>
-              PDF progress and annotations use the Foliate location model when
-              available.
-            </span>
-          ) : null}
-          {readerMode === "Comic" ? (
-            <span>
-              Comic archives render inline with page navigation and saved
-              progress.
-            </span>
-          ) : null}
+          <span className="font-medium text-foreground">Book mode</span>
           {readaloudAvailable ? (
             <span>
               Readaloud metadata detected; web speech remains available.
@@ -1212,6 +1351,7 @@ export default function Reader() {
             key={`${id}-${selectedFormat}`}
             bookID={id}
             format={selectedFormat}
+            fileUrl={fileURL}
             settings={{
               flow,
               fontFamily,
@@ -1236,16 +1376,20 @@ export default function Reader() {
             onSelectionChange={setReaderSelection}
           />
         ) : (
-          <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
+          <div className="flex h-full flex-col items-center justify-center gap-4 p-6 text-center">
             <div className="text-lg font-semibold">
-              {selectedFormat.toUpperCase()} ready
+              Read this {selectedFormat.toUpperCase()} in your preferred app
             </div>
             <p className="max-w-md text-sm text-muted-foreground">
-              Browser-native rendering for this archive format is not available
-              yet. Open or download the file to read it in a comic reader.
+              The in-browser reader currently supports EPUB. Download the file
+              and open it in a dedicated app (Adobe Acrobat for PDFs, Panels /
+              Chunky for comics, etc.) to read with proper navigation and
+              annotation support.
             </p>
             <Button asChild>
-              <a href={fileURL}>Open file</a>
+              <a href={fileURL} download>
+                Download {selectedFormat.toUpperCase()}
+              </a>
             </Button>
           </div>
         )}
@@ -1428,12 +1572,22 @@ export default function Reader() {
                           {result.label}
                         </div>
                       ) : null}
-                      <div className="line-clamp-3">
-                        {result.excerpt?.pre}
-                        <mark className="bg-yellow-200 px-0.5 text-foreground">
+                      {/*
+                        Foliate-js sometimes returns 500+ char pre/post chunks
+                        that overflow the card and force the user to squint.
+                        Cap each side at ~80 chars with ellipsis so the match
+                        is still surrounded by enough context to be useful.
+                      */}
+                      <div className="text-sm leading-relaxed">
+                        <span className="text-muted-foreground">
+                          {clipExcerpt(result.excerpt?.pre, 80, "lead")}
+                        </span>
+                        <mark className="rounded-sm bg-yellow-200/80 px-1 py-0.5 font-medium text-foreground">
                           {result.excerpt?.match}
                         </mark>
-                        {result.excerpt?.post || result.cfi}
+                        <span className="text-muted-foreground">
+                          {clipExcerpt(result.excerpt?.post ?? result.cfi ?? "", 80, "trail")}
+                        </span>
                       </div>
                     </button>
                   ))}
@@ -1511,54 +1665,75 @@ export default function Reader() {
                     TXT
                   </Button>
                 </div>
-                <div className="mt-4 space-y-3">
-                  {filteredNoteItems.map((annotation) => (
-                    <div
-                      key={annotation.id}
-                      className="rounded-md border border-border bg-background p-3 text-sm"
-                    >
-                      <button
-                        type="button"
-                        onClick={() => navigateTo(annotation.cfi_range)}
-                        className="block w-full text-left hover:text-primary"
-                      >
-                        <div className="font-medium">
-                          {annotation.kind === "note" ? "Note" : "Highlight"}
-                        </div>
-                        <div className="mt-1 text-xs text-muted-foreground">
-                          {annotation.note_text ||
-                            annotation.selected_text ||
-                            annotation.cfi_range}
-                        </div>
-                      </button>
-                      <div className="mt-3 flex gap-2">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => editAnnotation(annotation)}
-                        >
-                          Edit
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          disabled={!readerSelection}
-                          onClick={() =>
-                            void replaceAnnotationRange(annotation)
-                          }
-                        >
-                          Replace range
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => void removeAnnotation(annotation)}
-                        >
-                          <Trash2 className="mr-1 size-4" />
-                          Delete
-                        </Button>
+                <div className="mt-4 space-y-5">
+                  {noteGroups.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      {noteSearchTerm.trim()
+                        ? "No matches."
+                        : "No notes or highlights yet."}
+                    </p>
+                  ) : null}
+                  {noteGroups.map((group) => (
+                    <section key={group.label}>
+                      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        {group.label}
+                        <span className="ml-2 font-normal normal-case tracking-normal">
+                          ({group.items.length})
+                        </span>
+                      </h3>
+                      <div className="space-y-3">
+                        {group.items.map((annotation) => (
+                          <div
+                            key={annotation.id}
+                            className="rounded-md border border-border bg-background p-3 text-sm"
+                          >
+                            <button
+                              type="button"
+                              onClick={() => navigateTo(annotation.cfi_range)}
+                              className="block w-full text-left hover:text-primary"
+                            >
+                              <div className="font-medium">
+                                {annotation.kind === "note"
+                                  ? "Note"
+                                  : "Highlight"}
+                              </div>
+                              <div className="mt-1 text-xs text-muted-foreground">
+                                {annotation.note_text ||
+                                  annotation.selected_text ||
+                                  annotation.cfi_range}
+                              </div>
+                            </button>
+                            <div className="mt-3 flex gap-2">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => editAnnotation(annotation)}
+                              >
+                                Edit
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                disabled={!readerSelection}
+                                onClick={() =>
+                                  void replaceAnnotationRange(annotation)
+                                }
+                              >
+                                Replace range
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => void removeAnnotation(annotation)}
+                              >
+                                <Trash2 className="mr-1 size-4" />
+                                Delete
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                    </div>
+                    </section>
                   ))}
                 </div>
               </>
@@ -1602,6 +1777,36 @@ export default function Reader() {
             ) : null}
             {panelTab === "settings" ? (
               <div className="mt-4 space-y-5 text-sm">
+                {/*
+                  Preset picker first — most users will pick a profile once and
+                  never touch the individual sliders below. Each preset bumps
+                  font family + size + line-height at once, which is what
+                  "comfortable / accessible / compact" actually means.
+                */}
+                <div>
+                  <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    Reading profile
+                  </p>
+                  <div className="grid gap-2">
+                    {readerPresets.map((preset) => (
+                      <button
+                        key={preset.id}
+                        type="button"
+                        onClick={() => {
+                          setFontFamily(preset.fontFamily);
+                          setFontSize(preset.fontSize);
+                          setLineHeight(preset.lineHeight);
+                        }}
+                        className="rounded-md border border-border bg-background px-3 py-2 text-left hover:border-primary hover:bg-accent"
+                      >
+                        <div className="text-sm font-medium">{preset.label}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {preset.description}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
                 <div className="grid grid-cols-2 gap-2">
                   <label className="space-y-1">
                     <span className="text-xs text-muted-foreground">Flow</span>
@@ -1656,13 +1861,13 @@ export default function Reader() {
                     onChange={(event) => setFontFamily(event.target.value)}
                     className="h-9 w-full rounded-md border border-border bg-background px-2"
                   >
-                    <option value="serif">Serif</option>
-                    <option value="sans-serif">Sans serif</option>
-                    <option value="monospace">Monospace</option>
+                    <option value="Merriweather, Georgia, serif">Merriweather (default)</option>
+                    <option value="Lora, Georgia, serif">Lora</option>
                     <option value="Georgia, serif">Georgia</option>
-                    <option value="Atkinson Hyperlegible, sans-serif">
-                      Atkinson
-                    </option>
+                    <option value="serif">System serif</option>
+                    <option value="system-ui, sans-serif">System sans-serif</option>
+                    <option value="Atkinson Hyperlegible, sans-serif">Atkinson Hyperlegible</option>
+                    <option value="monospace">Monospace</option>
                   </select>
                 </label>
                 <label className="space-y-1">
@@ -1975,7 +2180,7 @@ export default function Reader() {
       </div>
       {readerSelection ? (
         <div
-          className="fixed z-50 flex max-w-[calc(100vw-1rem)] items-center gap-1 rounded-md border border-border bg-popover px-2 py-1.5 text-popover-foreground shadow-lg"
+          className="fixed z-50 flex max-w-[calc(100vw-1rem)] items-center gap-1 rounded-md border border-border bg-popover px-2 py-1.5 text-popover-foreground shadow-lg max-sm:inset-x-2 max-sm:bottom-[max(0.5rem,env(safe-area-inset-bottom))] max-sm:flex-wrap"
           style={toolbarStyle}
         >
           <Button

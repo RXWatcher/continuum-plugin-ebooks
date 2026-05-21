@@ -294,9 +294,8 @@ func (t *Tasks) KindleSendRetrier(ctx context.Context) error {
 func (t *Tasks) fetchKindleSource(ctx context.Context, cfg store.Config, k store.KindleSend) (string, func(), error) {
 	noop := func() {}
 	backendID := cfg.BackendTarget()
-	_, backendBookID, scoped := decodeBookRef(k.BookID)
+	libraryID, backendBookID, scoped := decodeBookRef(k.BookID)
 	if scoped {
-		libraryID, _, _ := decodeBookRef(k.BookID)
 		lib, err := t.Store.GetPortalLibrary(ctx, libraryID)
 		if err != nil {
 			return "", noop, fmt.Errorf("library not configured")
@@ -307,20 +306,23 @@ func (t *Tasks) fetchKindleSource(ctx context.Context, cfg store.Config, k store
 		return "", noop, fmt.Errorf("no backend configured")
 	}
 	bk := backend.NewEbookBackend(t.Host, backendID)
+	// Both fetch paths must carry the signed media token — the backend's
+	// /api/v1/file/* route is public + token-gated.
+	signedPath := bk.SignedFilePath(k.UserID, backendBookID, cfg.MediaSigningSecret)
 	if t.CacheManager != nil {
-		key := streaming.ComputeCacheKey(backendBookID, k.Format, backendID)
+		key := streaming.ComputeCacheKey(backendBookID, backendID, libraryID)
 		if e, ok := t.CacheManager.Lookup(ctx, key); ok {
 			release := t.CacheManager.Acquire(e.ID)
 			return t.CacheManager.PathFor(e), release, nil
 		}
 		fetch := func(ctx context.Context) (io.ReadCloser, http.Header, int64, string, error) {
-			resp, err := t.Host.GetStream(ctx, backendID, bk.FilePath(backendBookID, k.Format), nil)
+			resp, err := t.Host.GetStream(ctx, backendID, signedPath, nil)
 			if err != nil {
 				return nil, nil, 0, "", err
 			}
 			return resp.Body, resp.Header, resp.ContentLength, resp.Header.Get("Content-Type"), nil
 		}
-		entry, err := t.CacheManager.StartOrJoin(ctx, key, backendBookID, k.Format, fetch)
+		entry, err := t.CacheManager.StartOrJoin(ctx, key, backendBookID, "", fetch)
 		if err != nil {
 			return "", noop, err
 		}
@@ -328,7 +330,7 @@ func (t *Tasks) fetchKindleSource(ctx context.Context, cfg store.Config, k store
 		return t.CacheManager.PathFor(entry), release, nil
 	}
 	// Fallback: stream to a temp file.
-	resp, err := t.Host.GetStream(ctx, backendID, bk.FilePath(backendBookID, k.Format), nil)
+	resp, err := t.Host.GetStream(ctx, backendID, signedPath, nil)
 	if err != nil {
 		return "", noop, err
 	}

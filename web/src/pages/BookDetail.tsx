@@ -113,8 +113,10 @@ export default function BookDetail() {
   }
   if (!book.data) return null;
   const b = book.data;
+  // See BookCard for the same logic: a portal-signed `/api/v1/plugins/...`
+  // URL is already absolute and must not be double-prefixed with mountPath.
   const cover = b.cover_url
-    ? b.cover_url.startsWith("http")
+    ? /^(https?:|\/api\/v1\/plugins\/)/.test(b.cover_url)
       ? b.cover_url
       : `${mountPath()}${b.cover_url}`
     : "";
@@ -175,7 +177,7 @@ export default function BookDetail() {
             <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               <BookmarkPlus className="mr-1 inline size-3" /> Collections
             </p>
-            {collections.data?.items.length ? (
+            {collections.data?.items?.length ? (
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
                   <select

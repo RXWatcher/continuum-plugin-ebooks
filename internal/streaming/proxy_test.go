@@ -30,7 +30,7 @@ func TestProxyStream_ForwardsBodyAndHeaders(t *testing.T) {
 	host := backend.NewHostHTTPClient(upstream.URL, "")
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "/me/books/b1/file?format=epub", nil)
-	streaming.ProxyStream(rec, req, host, "inst", "b1", "epub")
+	streaming.ProxyStream(rec, req, host, "inst", "/api/v1/file/b1")
 	if rec.Code != 200 {
 		t.Fatalf("code = %d", rec.Code)
 	}
@@ -62,7 +62,7 @@ func TestProxyStream_ForwardsRangeHeader(t *testing.T) {
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "/file", nil)
 	req.Header.Set("Range", "bytes=0-3")
-	streaming.ProxyStream(rec, req, host, "inst", "b1", "epub")
+	streaming.ProxyStream(rec, req, host, "inst", "/api/v1/file/b1")
 	if sawRange != "bytes=0-3" {
 		t.Errorf("upstream Range = %q", sawRange)
 	}
@@ -79,7 +79,7 @@ func TestProxyStream_NoInstallID(t *testing.T) {
 	host := backend.NewHostHTTPClient("http://nowhere", "")
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "/", nil)
-	streaming.ProxyStream(rec, req, host, "", "b1", "epub")
+	streaming.ProxyStream(rec, req, host, "", "/api/v1/file/b1")
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Errorf("code = %d", rec.Code)
 	}

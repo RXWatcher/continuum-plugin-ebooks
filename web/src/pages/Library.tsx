@@ -3,7 +3,7 @@ import { Link, useSearchParams } from "react-router";
 import { X } from "lucide-react";
 import { listCatalog, listLibraries, type CatalogFilters } from "@/lib/api";
 import { BookCard } from "@/components/BookCard";
-import { Button } from "@/components/ui/button";
+import InfiniteFooter from "@/components/InfiniteFooter";
 import { Skeleton } from "@/components/ui/skeleton";
 
 // Library is the catalog browser. Optional filter query params drive a server-
@@ -100,18 +100,12 @@ export default function Library() {
               <BookCard key={b.id} book={b} />
             ))}
           </div>
-          {q.hasNextPage && (
-            <div className="flex justify-center pt-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => q.fetchNextPage()}
-                disabled={q.isFetchingNextPage}
-              >
-                {q.isFetchingNextPage ? "Loading…" : "Load more"}
-              </Button>
-            </div>
-          )}
+          <InfiniteFooter
+            hasNextPage={q.hasNextPage}
+            isFetchingNextPage={q.isFetchingNextPage}
+            fetchNextPage={() => q.fetchNextPage()}
+            label="books"
+          />
         </>
       ) : (
         <p className="text-sm text-muted-foreground">

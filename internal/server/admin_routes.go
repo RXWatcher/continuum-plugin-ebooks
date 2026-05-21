@@ -221,7 +221,9 @@ func (s *Server) handleAdminGetBackend(w http.ResponseWriter, r *http.Request) {
 		"kindle_smtp_config":             json.RawMessage(cfg.KindleSMTPConfig),
 		"kepubify_path":                  cfg.KepubifyPath,
 		"standalone_http_listen":         cfg.StandaloneHTTPListen,
-		"libraries":                      libs,
+		// Don't leak the secret over the wire — just whether it's configured.
+		"media_signing_secret_set": cfg.MediaSigningSecret != "",
+		"libraries":                libs,
 	})
 }
 
@@ -239,6 +241,7 @@ func (s *Server) handleAdminPatchBackend(w http.ResponseWriter, r *http.Request)
 		KindleSMTPConfig         *json.RawMessage `json:"kindle_smtp_config"`
 		KepubifyPath             *string          `json:"kepubify_path"`
 		StandaloneHTTPListen     *string          `json:"standalone_http_listen"`
+		MediaSigningSecret       *string          `json:"media_signing_secret"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeErr(w, 400, err.Error())
@@ -280,6 +283,9 @@ func (s *Server) handleAdminPatchBackend(w http.ResponseWriter, r *http.Request)
 	}
 	if body.StandaloneHTTPListen != nil {
 		cur.StandaloneHTTPListen = *body.StandaloneHTTPListen
+	}
+	if body.MediaSigningSecret != nil {
+		cur.MediaSigningSecret = *body.MediaSigningSecret
 	}
 	if err := s.deps.Store.UpsertConfig(r.Context(), cur); err != nil {
 		writeInternal(w, r, err)

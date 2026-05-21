@@ -24,7 +24,7 @@ func TestCombineCatalogResults_AllFailDegradesEmpty(t *testing.T) {
 	env, err := combineCatalogResults([]libResult{
 		{lib: store.PortalLibrary{ID: 1}, err: boom},
 		{lib: store.PortalLibrary{ID: 2}, err: boom},
-	}, 50)
+	}, 50, "", "")
 	if err != nil {
 		t.Fatalf("all libraries failed but combineCatalogResults returned error: %v", err)
 	}
@@ -39,7 +39,7 @@ func TestCombineCatalogResults_PartialSucceeds(t *testing.T) {
 	env, err := combineCatalogResults([]libResult{
 		{lib: store.PortalLibrary{ID: 1, Name: "A"}, env: sumEnv("a1", "a2")},
 		{lib: store.PortalLibrary{ID: 2}, err: errors.New("down")},
-	}, 50)
+	}, 50, "", "")
 	if err != nil {
 		t.Fatalf("partial success should not error: %v", err)
 	}
@@ -59,7 +59,7 @@ func TestCombineCatalogResults_TruncatesToLimit(t *testing.T) {
 	env, err := combineCatalogResults([]libResult{
 		{lib: store.PortalLibrary{ID: 1}, env: sumEnv("a", "b", "c")},
 		{lib: store.PortalLibrary{ID: 2}, env: sumEnv("d", "e", "f")},
-	}, 4)
+	}, 4, "", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -72,7 +72,7 @@ func TestCombineCatalogResults_TruncatesToLimit(t *testing.T) {
 func TestCombineCatalogResults_NoLimitKeepsAll(t *testing.T) {
 	env, _ := combineCatalogResults([]libResult{
 		{lib: store.PortalLibrary{ID: 1}, env: sumEnv("a", "b", "c", "d", "e")},
-	}, 0)
+	}, 0, "", "")
 	if len(env.Items) != 5 {
 		t.Fatalf("want all 5 items with no limit, got %d", len(env.Items))
 	}

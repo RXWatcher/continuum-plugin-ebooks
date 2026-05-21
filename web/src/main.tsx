@@ -24,6 +24,19 @@ if (theme) {
   document.documentElement.dataset.theme = theme;
 }
 
+// Register the service worker so the browser will offer to install the portal
+// as a PWA. The SW lives at <mountPath>/sw.js with its scope rooted at
+// <mountPath>/ — anything broader would conflict with other plugins served
+// from the same continuum origin. Failure is silent (dev / non-secure
+// contexts); the SPA still works, just no install prompt.
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    const base = detectBasename();
+    const scope = base.endsWith("/") ? base : base + "/";
+    void navigator.serviceWorker.register(scope + "sw.js", { scope }).catch(() => {});
+  });
+}
+
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>

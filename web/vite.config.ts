@@ -1,7 +1,7 @@
 import path from 'node:path';
-import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
+import { defineConfig } from 'vitest/config';
 
 // Continuum mounts each plugin under /api/v1/plugins/{installationId}/, where
 // installationId is assigned at install time. Using a relative base ("./")
@@ -16,6 +16,9 @@ export default defineConfig({
       '@readest': path.resolve(__dirname, './src/reader/readest'),
       '@pdfjs': path.resolve(__dirname, './public/vendor/pdfjs'),
     },
+  },
+  test: {
+    environment: 'jsdom',
   },
   build: { outDir: 'dist', emptyOutDir: true },
 });

@@ -11,6 +11,7 @@ function apiBase(): string {
 // capture it once into memory for use on all subsequent fetches.
 let cachedToken: string | null = null;
 let cachedTheme: string | null = null;
+let refreshPromise: Promise<string | null> | null = null;
 (function captureFromURL() {
   const params = new URLSearchParams(window.location.search);
   const t = params.get("token");
@@ -44,20 +45,92 @@ export function getCachedTheme(): string | null {
   return cachedTheme;
 }
 
+function authHeaders(token = cachedToken, init?: HeadersInit): Headers {
+  const headers = new Headers(init);
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+  return headers;
+}
+
+async function refreshAccessToken(): Promise<string | null> {
+  if (refreshPromise) {
+    return refreshPromise;
+  }
+
+  refreshPromise = (async () => {
+    let refreshToken: string | null = null;
+    try {
+      refreshToken = window.localStorage.getItem("refresh_token");
+    } catch {
+      return null;
+    }
+
+    if (!refreshToken) {
+      return null;
+    }
+
+    const response = await fetch("/api/v1/auth/refresh", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+      credentials: "include",
+    });
+    if (!response.ok) {
+      return null;
+    }
+
+    const data = await response.json();
+    cachedToken = data.access_token ?? null;
+    if (data.refresh_token) {
+      try {
+        window.localStorage.setItem("refresh_token", data.refresh_token);
+      } catch {
+        // Storage may be unavailable; keep using the in-memory access token.
+      }
+    }
+    return cachedToken;
+  })().finally(() => {
+    refreshPromise = null;
+  });
+
+  return refreshPromise;
+}
+
+async function authedFetch(input: string, init: RequestInit = {}): Promise<Response> {
+  let res = await fetch(input, {
+    ...init,
+    headers: authHeaders(cachedToken, init.headers),
+    credentials: init.credentials ?? "include",
+  });
+
+  if (res.status !== 401) {
+    return res;
+  }
+
+  const freshToken = await refreshAccessToken();
+  if (!freshToken) {
+    return res;
+  }
+
+  return fetch(input, {
+    ...init,
+    headers: authHeaders(freshToken, init.headers),
+    credentials: init.credentials ?? "include",
+  });
+}
+
 async function call<T>(
   method: string,
   path: string,
   body?: unknown,
 ): Promise<T> {
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-  };
-  if (cachedToken) headers["Authorization"] = `Bearer ${cachedToken}`;
-  const res = await fetch(`${apiBase()}${path}`, {
+  const res = await authedFetch(`${apiBase()}${path}`, {
     method,
-    headers,
+    headers: {
+      "Content-Type": "application/json",
+    },
     body: body !== undefined ? JSON.stringify(body) : undefined,
-    credentials: "include",
   });
   if (!res.ok) {
     const err = await res
@@ -75,11 +148,7 @@ export const api = {
   patch: <T>(p: string, body?: unknown) => call<T>("PATCH", p, body),
   put: <T>(p: string, body?: unknown) => call<T>("PUT", p, body),
   delete: <T>(p: string) => call<T>("DELETE", p),
-  fetchRaw: async (path: string) => {
-    const headers: Record<string, string> = {};
-    if (cachedToken) headers["Authorization"] = `Bearer ${cachedToken}`;
-    return fetch(`${apiBase()}${path}`, { headers, credentials: "include" });
-  },
+  fetchRaw: async (path: string) => authedFetch(`${apiBase()}${path}`),
 };
 
 export function mountPath(): string {
@@ -702,12 +771,7 @@ function hasEbookRole(plugin: InstalledBackend, role: string): boolean {
 }
 
 async function fetchInstalledEbookPlugins(): Promise<InstalledBackend[]> {
-  const headers: Record<string, string> = {};
-  if (cachedToken) headers["Authorization"] = `Bearer ${cachedToken}`;
-  const res = await fetch("/api/v1/admin/plugins/installations", {
-    headers,
-    credentials: "include",
-  });
+  const res = await authedFetch("/api/v1/admin/plugins/installations");
   if (!res.ok) {
     // Throw instead of returning [] so React Query surfaces the failure.
     // Silently returning an empty list rendered a misleading "no library

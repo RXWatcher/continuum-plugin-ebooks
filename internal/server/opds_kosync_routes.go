@@ -142,7 +142,7 @@ func buildOPDSCatalogFeed(env backend.PageEnvelope[backend.EbookSummary], realm 
 }
 
 func (s *Server) handleOPDSCatalog(w http.ResponseWriter, r *http.Request) {
-	if !s.opdsAuth(r) {
+	if s.opdsAuth(r) == "" {
 		s.opdsChallenge(w, r)
 		return
 	}
@@ -166,7 +166,7 @@ func (s *Server) handleOPDSCatalog(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleOPDSSearch(w http.ResponseWriter, r *http.Request) {
-	if !s.opdsAuth(r) {
+	if s.opdsAuth(r) == "" {
 		s.opdsChallenge(w, r)
 		return
 	}
@@ -219,7 +219,7 @@ func (s *Server) handleOPDSSearch(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleOPDSBookEntry(w http.ResponseWriter, r *http.Request) {
-	if !s.opdsAuth(r) {
+	if s.opdsAuth(r) == "" {
 		s.opdsChallenge(w, r)
 		return
 	}
@@ -252,7 +252,8 @@ func (s *Server) handleOPDSBookEntry(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleOPDSDownload(w http.ResponseWriter, r *http.Request) {
-	if !s.opdsAuth(r) {
+	userID := s.opdsAuth(r)
+	if userID == "" {
 		s.opdsChallenge(w, r)
 		return
 	}
@@ -261,10 +262,22 @@ func (s *Server) handleOPDSDownload(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 412, "no backend")
 		return
 	}
-	bk := backend.NewEbookBackend(s.deps.Host, cfg.BackendTarget())
-	bookID := chi.URLParam(r, "id")
-	format := chi.URLParam(r, "format")
-	resp, err := s.deps.Host.GetStream(r.Context(), cfg.BackendTarget(), bk.FilePath(bookID, format), nil)
+	// The OPDS feed embeds portal-encoded book refs ("libID:b64bookid") so a
+	// multi-library deployment can route the download to the right backend.
+	// Plain ids (no colon) fall back to the configured default backend, which
+	// preserves single-library deployments unchanged.
+	rawRef := chi.URLParam(r, "id")
+	libraryID, bookID, _ := decodeBookRef(rawRef)
+	installID := cfg.BackendTarget()
+	if libraryID > 0 {
+		if lib, err := s.deps.Store.GetPortalLibrary(r.Context(), libraryID); err == nil && lib.BackendPluginID != "" {
+			installID = lib.BackendPluginID
+		}
+	}
+	bk := backend.NewEbookBackend(s.deps.Host, installID)
+	// Mint a signed media token before hitting the backend — the backend's
+	// /api/v1/file/* route is public + token-gated, an unsigned fetch 401s.
+	resp, err := s.deps.Host.GetStream(r.Context(), installID, bk.SignedFilePath(userID, bookID, cfg.MediaSigningSecret), nil)
 	if err != nil {
 		writeBadGateway(w, r, err)
 		return
@@ -334,23 +347,25 @@ func formatMime(f string) string {
 	return "application/octet-stream"
 }
 
-func (s *Server) opdsAuth(r *http.Request) bool {
+// opdsAuth validates the OPDS Basic-Auth credentials and returns the
+// authenticated portal user id. Returns "" when the request is unauthorized.
+func (s *Server) opdsAuth(r *http.Request) string {
 	user, pass, ok := r.BasicAuth()
 	if !ok || user == "" || pass == "" {
-		return false
+		return ""
 	}
 	t, err := s.deps.Store.GetOPDSTokenByJTI(r.Context(), pass)
 	if err != nil {
-		return false
+		return ""
 	}
 	if t.UserID != user {
-		return false
+		return ""
 	}
 	if err := bcrypt.CompareHashAndPassword([]byte(t.TokenHash), []byte(pass)); err != nil {
-		return false
+		return ""
 	}
 	_ = s.deps.Store.TouchOPDSToken(r.Context(), pass)
-	return true
+	return t.UserID
 }
 
 func (s *Server) opdsChallenge(w http.ResponseWriter, r *http.Request) {

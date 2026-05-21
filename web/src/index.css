@@ -1942,3 +1942,30 @@
       color-mix(in srgb, var(--impersonation-accent) 28%, transparent);
   }
 }
+
+/* E-ink mode: kill anything that ghosts on Kindle/Kobo browsers.
+ * Activated by useEinkMode() — body class "eink" toggles via
+ * localStorage. Animations, transitions, gradients, and blurs all
+ * disable so the screen refreshes cleanly without ghost trails. */
+body.eink *,
+body.eink *::before,
+body.eink *::after {
+  animation-duration: 0s !important;
+  animation-delay: 0s !important;
+  transition: none !important;
+}
+body.eink .blur-3xl,
+body.eink .blur-2xl,
+body.eink .blur-xl,
+body.eink .blur-lg,
+body.eink .backdrop-blur-sm,
+body.eink .backdrop-blur,
+body.eink .backdrop-blur-md,
+body.eink .backdrop-blur-lg {
+  filter: none !important;
+  backdrop-filter: none !important;
+}
+body.eink {
+  /* Force monochrome-ish palette by neutralising primary tints. */
+  --primary: 0 0% 30%;
+}

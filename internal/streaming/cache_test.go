@@ -99,7 +99,7 @@ func TestManager_MissThenHit(t *testing.T) {
 	dir := t.TempDir()
 	m := streaming.NewManager(dir, 1<<30, st)
 	ctx := context.Background()
-	key := streaming.ComputeCacheKey("b1", "epub", "inst")
+	key := streaming.ComputeCacheKey("b1", "inst", 1)
 	fetch := func(ctx context.Context) (io.ReadCloser, http.Header, int64, string, error) {
 		return io.NopCloser(strings.NewReader("hello")), http.Header{}, 5, "application/epub+zip", nil
 	}
@@ -124,7 +124,7 @@ func TestManager_SingleFlight(t *testing.T) {
 	dir := t.TempDir()
 	m := streaming.NewManager(dir, 1<<30, st)
 	ctx := context.Background()
-	key := streaming.ComputeCacheKey("b2", "epub", "inst")
+	key := streaming.ComputeCacheKey("b2", "inst", 1)
 	var fetchCount atomic.Int32
 	gate := make(chan struct{})
 	fetch := func(ctx context.Context) (io.ReadCloser, http.Header, int64, string, error) {
@@ -166,7 +166,7 @@ func TestManager_EvictTo(t *testing.T) {
 	m := streaming.NewManager(dir, 1<<30, st)
 	ctx := context.Background()
 	for i := 0; i < 4; i++ {
-		key := streaming.ComputeCacheKey(fmt.Sprintf("b-%d", i), "epub", "inst")
+		key := streaming.ComputeCacheKey(fmt.Sprintf("b-%d", i), "inst", 1)
 		fetch := func(ctx context.Context) (io.ReadCloser, http.Header, int64, string, error) {
 			body := strings.Repeat("x", 100)
 			return io.NopCloser(strings.NewReader(body)), http.Header{}, int64(len(body)), "application/epub+zip", nil
@@ -204,7 +204,7 @@ func TestManager_AcquireBlocksEvict(t *testing.T) {
 	var keys []string
 	var ids []string
 	for i := 0; i < 2; i++ {
-		key := streaming.ComputeCacheKey(fmt.Sprintf("hold-%d", i), "epub", "inst")
+		key := streaming.ComputeCacheKey(fmt.Sprintf("hold-%d", i), "inst", 1)
 		keys = append(keys, key)
 		fetch := func(ctx context.Context) (io.ReadCloser, http.Header, int64, string, error) {
 			body := strings.Repeat("y", 100)
