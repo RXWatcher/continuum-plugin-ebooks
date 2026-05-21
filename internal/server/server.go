@@ -103,11 +103,13 @@ func (s *Server) Handler() http.Handler {
 		s.mountDictionaryRoutes(r)
 		s.mountTranslateRoutes(r)
 		s.mountReadingGoalRoutes(r)
+		s.mountShareLinkRoutes(r)
 		r.Group(func(r chi.Router) {
 			r.Use(auth.RequireAdmin)
 			s.mountAdminRoutes(r)
 		})
 	})
+	s.MountPublicShare(r)
 
 	// SPA fallback. Content types for PWA assets are pre-set because plugins
 	// run in a minimal container with no /etc/mime.types and Go's mime
