@@ -14,13 +14,11 @@ import {
   Columns2,
   Copy,
   Download,
-  Focus,
   BookOpen,
   Highlighter,
   Languages,
   ListTree,
   Maximize2,
-  Moon,
   NotebookPen,
   Pause,
   Pencil,
@@ -172,8 +170,10 @@ export default function Reader() {
   const [lineHeight, setLineHeight] = useState(1.8);
   const [margin, setMargin] = useState(24);
   const [maxWidth, setMaxWidth] = useState(72);
-  const [paragraphFocus, setParagraphFocus] = useState(false);
+  const [fontBrightness, setFontBrightness] = useState(100);
   const [readingRuler, setReadingRuler] = useState(false);
+  const [rulerTop, setRulerTop] = useState(50);
+  const rulerDragRef = useRef<{ offsetY: number } | null>(null);
   const [rtl, setRtl] = useState(false);
   const [writingMode, setWritingMode] = useState<WritingMode>("auto");
   const [zoom, setZoom] = useState(100);
@@ -366,14 +366,19 @@ export default function Reader() {
         if (typeof viewSettings.maxWidth === "number") {
           setMaxWidth(viewSettings.maxWidth);
         }
-        if (typeof viewSettings.paragraphFocus === "boolean") {
-          setParagraphFocus(viewSettings.paragraphFocus);
+        if (typeof viewSettings.fontBrightness === "number") {
+          setFontBrightness(
+            Math.min(200, Math.max(40, viewSettings.fontBrightness)),
+          );
         }
         if (typeof viewSettings.quickAction === "string") {
           setQuickAction(viewSettings.quickAction as QuickAction);
         }
         if (typeof viewSettings.readingRuler === "boolean") {
           setReadingRuler(viewSettings.readingRuler);
+        }
+        if (typeof viewSettings.rulerTop === "number") {
+          setRulerTop(Math.min(100, Math.max(0, viewSettings.rulerTop)));
         }
         if (typeof viewSettings.rtl === "boolean") {
           setRtl(viewSettings.rtl);
@@ -431,6 +436,7 @@ export default function Reader() {
                 unknown
               >),
               flow,
+              fontBrightness,
               fontFamily,
               fontSize,
               fontWeight,
@@ -439,9 +445,9 @@ export default function Reader() {
               lineHeight,
               margin,
               maxWidth,
-              paragraphFocus,
               quickAction,
               readingRuler,
+              rulerTop,
               rtl,
               spread,
               theme,
@@ -471,6 +477,7 @@ export default function Reader() {
     return () => window.clearTimeout(timeout);
   }, [
     flow,
+    fontBrightness,
     fontFamily,
     fontSize,
     fontWeight,
@@ -480,9 +487,9 @@ export default function Reader() {
     lineHeight,
     margin,
     maxWidth,
-    paragraphFocus,
     quickAction,
     readingRuler,
+    rulerTop,
     rtl,
     settingsLoaded,
     spread,
@@ -880,6 +887,7 @@ export default function Reader() {
 
   const currentReaderDefaults = () => ({
     flow,
+    fontBrightness,
     fontFamily,
     fontSize,
     fontWeight,
@@ -888,9 +896,9 @@ export default function Reader() {
     lineHeight,
     margin,
     maxWidth,
-    paragraphFocus,
     quickAction,
     readingRuler,
+    rulerTop,
     rtl,
     spread,
     theme,
@@ -921,12 +929,14 @@ export default function Reader() {
       setLineHeight(defaults.lineHeight);
     if (typeof defaults.margin === "number") setMargin(defaults.margin);
     if (typeof defaults.maxWidth === "number") setMaxWidth(defaults.maxWidth);
-    if (typeof defaults.paragraphFocus === "boolean")
-      setParagraphFocus(defaults.paragraphFocus);
+    if (typeof defaults.fontBrightness === "number")
+      setFontBrightness(Math.min(200, Math.max(40, defaults.fontBrightness)));
     if (typeof defaults.quickAction === "string")
       setQuickAction(defaults.quickAction as QuickAction);
     if (typeof defaults.readingRuler === "boolean")
       setReadingRuler(defaults.readingRuler);
+    if (typeof defaults.rulerTop === "number")
+      setRulerTop(Math.min(100, Math.max(0, defaults.rulerTop)));
     if (typeof defaults.rtl === "boolean") setRtl(defaults.rtl);
     if (typeof defaults.spread === "string")
       setSpread(defaults.spread as "auto" | "none");
@@ -1254,18 +1264,6 @@ export default function Reader() {
             </select>
             <Button
               size="icon"
-              variant={theme === "dark" ? "secondary" : "ghost"}
-              onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-              aria-label="Toggle dark reader theme"
-            >
-              {theme === "dark" ? (
-                <Sun className="size-4" />
-              ) : (
-                <Moon className="size-4" />
-              )}
-            </Button>
-            <Button
-              size="icon"
               variant={spread === "none" ? "secondary" : "ghost"}
               onClick={() =>
                 setSpread((value) => (value === "none" ? "auto" : "none"))
@@ -1283,14 +1281,35 @@ export default function Reader() {
             >
               <Ruler className="size-4" />
             </Button>
-            <Button
-              size="icon"
-              variant={paragraphFocus ? "secondary" : "ghost"}
-              onClick={() => setParagraphFocus((value) => !value)}
-              aria-label="Toggle paragraph focus"
+            <div
+              className="flex items-center gap-1 rounded-md border border-border bg-background px-1 py-1"
+              title="Font brightness — dims text toward the background for less eye strain"
             >
-              <Focus className="size-4" />
-            </Button>
+              <Sun className="ml-1 size-4 text-muted-foreground" />
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() =>
+                  setFontBrightness((value) => Math.max(40, value - 10))
+                }
+                aria-label="Decrease font brightness"
+              >
+                B-
+              </Button>
+              <span className="w-10 text-center text-xs text-muted-foreground">
+                {fontBrightness}%
+              </span>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() =>
+                  setFontBrightness((value) => Math.min(200, value + 10))
+                }
+                aria-label="Increase font brightness"
+              >
+                B+
+              </Button>
+            </div>
             <Button
               size="sm"
               variant={showPanel ? "secondary" : "ghost"}
@@ -1314,30 +1333,6 @@ export default function Reader() {
               aria-label="Highlight selection"
             >
               <Highlighter className="size-4" />
-            </Button>
-            <Button
-              size="icon"
-              variant={ttsActive ? "secondary" : "ghost"}
-              onClick={toggleTts}
-              aria-label={ttsActive ? "Stop reading aloud" : "Read aloud"}
-            >
-              {ttsActive ? (
-                <Square className="size-4" />
-              ) : (
-                <Volume2 className="size-4" />
-              )}
-            </Button>
-            <Button
-              size="icon"
-              variant={rsvpActive ? "secondary" : "ghost"}
-              onClick={() => (rsvpActive ? setRsvpActive(false) : startRsvp())}
-              aria-label="Toggle RSVP reading"
-            >
-              {rsvpActive ? (
-                <Square className="size-4" />
-              ) : (
-                <Play className="size-4" />
-              )}
             </Button>
             <Button
               size="icon"
@@ -1425,6 +1420,7 @@ export default function Reader() {
             fileUrl={fileURL}
             settings={{
               flow,
+              fontBrightness,
               fontFamily,
               fontSize,
               fontWeight,
@@ -1432,7 +1428,6 @@ export default function Reader() {
               lineHeight,
               margin,
               maxWidth,
-              paragraphFocus,
               rtl,
               spread,
               theme,
@@ -1467,46 +1462,35 @@ export default function Reader() {
         {showPanel && canUseReader && (
           <aside className="min-h-0 overflow-y-auto border-l border-border bg-card p-4">
             <div className="grid grid-cols-5 gap-1 rounded-md border border-border bg-background p-1">
-              <Button
-                size="sm"
-                variant={panelTab === "toc" ? "secondary" : "ghost"}
-                onClick={() => setPanelTab("toc")}
-              >
-                <ListTree className="mr-1 size-4" />
-                TOC
-              </Button>
-              <Button
-                size="sm"
-                variant={panelTab === "search" ? "secondary" : "ghost"}
-                onClick={() => setPanelTab("search")}
-              >
-                <Search className="mr-1 size-4" />
-                Find
-              </Button>
-              <Button
-                size="sm"
-                variant={panelTab === "notes" ? "secondary" : "ghost"}
-                onClick={() => setPanelTab("notes")}
-              >
-                <NotebookPen className="mr-1 size-4" />
-                Notes
-              </Button>
-              <Button
-                size="sm"
-                variant={panelTab === "bookmarks" ? "secondary" : "ghost"}
-                onClick={() => setPanelTab("bookmarks")}
-              >
-                <Bookmark className="mr-1 size-4" />
-                Marks
-              </Button>
-              <Button
-                size="sm"
-                variant={panelTab === "settings" ? "secondary" : "ghost"}
-                onClick={() => setPanelTab("settings")}
-              >
-                <Settings className="mr-1 size-4" />
-                Set
-              </Button>
+              {(
+                [
+                  { id: "toc", label: "TOC", icon: ListTree },
+                  { id: "search", label: "Find", icon: Search },
+                  { id: "notes", label: "Notes", icon: NotebookPen },
+                  { id: "bookmarks", label: "Marks", icon: Bookmark },
+                  { id: "settings", label: "Settings", icon: Settings },
+                ] satisfies Array<{
+                  id: ReaderPanelTab;
+                  label: string;
+                  icon: typeof ListTree;
+                }>
+              ).map(({ id: tabId, label, icon: Icon }) => (
+                <button
+                  key={tabId}
+                  type="button"
+                  onClick={() => setPanelTab(tabId)}
+                  aria-label={label}
+                  title={label}
+                  className={`flex h-auto flex-col items-center justify-center gap-1 rounded-md px-1 py-1.5 text-[10px] font-medium transition-colors ${
+                    panelTab === tabId
+                      ? "bg-secondary text-secondary-foreground"
+                      : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                  }`}
+                >
+                  <Icon className="size-4" />
+                  <span className="leading-none">{label}</span>
+                </button>
+              ))}
             </div>
             {panelTab === "toc" ? (
               <div className="mt-4 space-y-1">
@@ -1847,17 +1831,79 @@ export default function Reader() {
               </div>
             ) : null}
             {panelTab === "settings" ? (
-              <div className="mt-4 space-y-5 text-sm">
-                {/*
-                  Preset picker first — most users will pick a profile once and
-                  never touch the individual sliders below. Each preset bumps
-                  font family + size + line-height at once, which is what
-                  "comfortable / accessible / compact" actually means.
-                */}
-                <div>
-                  <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              <div className="mt-4 space-y-6 text-sm">
+                <section className="space-y-3">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Appearance
+                  </h3>
+                  <div className="space-y-1.5">
+                    <span className="text-xs text-muted-foreground">Theme</span>
+                    <div className="grid grid-cols-3 gap-2">
+                      {(["light", "sepia", "dark"] as const).map((mode) => (
+                        <Button
+                          key={mode}
+                          size="sm"
+                          variant={theme === mode ? "secondary" : "outline"}
+                          onClick={() => setTheme(mode)}
+                        >
+                          {mode === "light"
+                            ? "Light"
+                            : mode === "sepia"
+                            ? "Sepia"
+                            : "Dark"}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <span className="text-xs text-muted-foreground">
+                      Font size {fontSize}%
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="flex-1"
+                        onClick={() =>
+                          setFontSize((value) => Math.max(75, value - 10))
+                        }
+                      >
+                        A-
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="flex-1"
+                        onClick={() =>
+                          setFontSize((value) => Math.min(160, value + 10))
+                        }
+                      >
+                        A+
+                      </Button>
+                    </div>
+                  </div>
+                  <label className="space-y-1.5">
+                    <span className="text-xs text-muted-foreground">
+                      Font brightness {fontBrightness}%
+                    </span>
+                    <input
+                      type="range"
+                      min="40"
+                      max="200"
+                      step="5"
+                      value={fontBrightness}
+                      onChange={(event) =>
+                        setFontBrightness(Number(event.target.value))
+                      }
+                      className="w-full"
+                    />
+                  </label>
+                </section>
+
+                <section className="space-y-3">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                     Reading profile
-                  </p>
+                  </h3>
                   <div className="grid gap-2">
                     {readerPresets.map((preset) => (
                       <button
@@ -1877,181 +1923,211 @@ export default function Reader() {
                       </button>
                     ))}
                   </div>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <label className="space-y-1">
-                    <span className="text-xs text-muted-foreground">Flow</span>
-                    <select
-                      value={flow}
-                      onChange={(event) =>
-                        setFlow(event.target.value as ReaderFlow)
-                      }
-                      className="h-9 w-full rounded-md border border-border bg-background px-2"
-                    >
-                      <option value="paginated">Pages</option>
-                      <option value="scrolled">Scroll</option>
-                    </select>
-                  </label>
-                  <label className="space-y-1">
-                    <span className="text-xs text-muted-foreground">
-                      Writing
-                    </span>
-                    <select
-                      value={writingMode}
-                      onChange={(event) =>
-                        setWritingMode(event.target.value as WritingMode)
-                      }
-                      className="h-9 w-full rounded-md border border-border bg-background px-2"
-                    >
-                      <option value="auto">Auto</option>
-                      <option value="horizontal-tb">Horizontal</option>
-                      <option value="vertical-rl">Vertical</option>
-                    </select>
-                  </label>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={saveGlobalDefaults}
-                  >
-                    Save defaults
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={loadGlobalDefaults}
-                  >
-                    Apply defaults
-                  </Button>
-                </div>
-                <label className="space-y-1">
-                  <span className="text-xs text-muted-foreground">Font</span>
-                  <select
-                    value={fontFamily}
-                    onChange={(event) => setFontFamily(event.target.value)}
-                    className="h-9 w-full rounded-md border border-border bg-background px-2"
-                  >
-                    <option value="Merriweather, Georgia, serif">Merriweather (default)</option>
-                    <option value="Lora, Georgia, serif">Lora</option>
-                    <option value="Georgia, serif">Georgia</option>
-                    <option value="serif">System serif</option>
-                    <option value="system-ui, sans-serif">System sans-serif</option>
-                    <option value="Atkinson Hyperlegible, sans-serif">Atkinson Hyperlegible</option>
-                    <option value="monospace">Monospace</option>
-                    {(customFonts.data?.items ?? []).length > 0 && (
-                      <optgroup label="Your fonts">
-                        {(customFonts.data?.items ?? []).map((f) => (
-                          <option key={f.id} value={JSON.stringify(f.name).slice(1, -1)}>
-                            {f.name}
-                          </option>
-                        ))}
-                      </optgroup>
-                    )}
-                  </select>
-                </label>
-                <CustomFontUploader fonts={customFonts.data?.items ?? []} />
-                <label className="space-y-1">
-                  <span className="text-xs text-muted-foreground">
-                    Line height {lineHeight.toFixed(1)}
-                  </span>
-                  <input
-                    type="range"
-                    min="1.1"
-                    max="2.4"
-                    step="0.1"
-                    value={lineHeight}
-                    onChange={(event) =>
-                      setLineHeight(Number(event.target.value))
-                    }
-                    className="w-full"
-                  />
-                </label>
-                <label className="space-y-1">
-                  <span className="text-xs text-muted-foreground">
-                    Margin {margin}px
-                  </span>
-                  <input
-                    type="range"
-                    min="0"
-                    max="88"
-                    step="4"
-                    value={margin}
-                    onChange={(event) => setMargin(Number(event.target.value))}
-                    className="w-full"
-                  />
-                </label>
-                <label className="space-y-1">
-                  <span className="text-xs text-muted-foreground">
-                    Max width {maxWidth}ch
-                  </span>
-                  <input
-                    type="range"
-                    min="42"
-                    max="120"
-                    step="2"
-                    value={maxWidth}
-                    onChange={(event) =>
-                      setMaxWidth(Number(event.target.value))
-                    }
-                    className="w-full"
-                  />
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  <label className="space-y-1">
-                    <span className="text-xs text-muted-foreground">
-                      Weight {fontWeight}
-                    </span>
-                    <input
-                      type="range"
-                      min="300"
-                      max="800"
-                      step="100"
-                      value={fontWeight}
-                      onChange={(event) =>
-                        setFontWeight(Number(event.target.value))
-                      }
-                      className="w-full"
-                    />
-                  </label>
-                  <label className="space-y-1">
-                    <span className="text-xs text-muted-foreground">
-                      Zoom {zoom}%
-                    </span>
-                    <input
-                      type="range"
-                      min="50"
-                      max="200"
-                      step="10"
-                      value={zoom}
-                      onChange={(event) => setZoom(Number(event.target.value))}
-                      className="w-full"
-                    />
-                  </label>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={hyphenation}
-                      onChange={(event) => setHyphenation(event.target.checked)}
-                    />
-                    Hyphenation
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={rtl}
-                      onChange={(event) => setRtl(event.target.checked)}
-                    />
-                    RTL
-                  </label>
-                </div>
-                <div className="rounded-md border border-border bg-background p-3">
-                  <div className="mb-2 flex items-center gap-2 text-xs font-medium text-muted-foreground">
-                    <Volume2 className="size-4" />
-                    TTS
+                </section>
+
+                <section className="space-y-3">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Layout
+                  </h3>
+                  <div className="grid grid-cols-2 gap-3">
+                    <label className="space-y-1">
+                      <span className="text-xs text-muted-foreground">
+                        Flow
+                      </span>
+                      <select
+                        value={flow}
+                        onChange={(event) =>
+                          setFlow(event.target.value as ReaderFlow)
+                        }
+                        className="h-9 w-full rounded-md border border-border bg-background px-2"
+                      >
+                        <option value="paginated">Pages</option>
+                        <option value="scrolled">Scroll</option>
+                      </select>
+                    </label>
+                    <label className="space-y-1">
+                      <span className="text-xs text-muted-foreground">
+                        Writing
+                      </span>
+                      <select
+                        value={writingMode}
+                        onChange={(event) =>
+                          setWritingMode(event.target.value as WritingMode)
+                        }
+                        className="h-9 w-full rounded-md border border-border bg-background px-2"
+                      >
+                        <option value="auto">Auto</option>
+                        <option value="horizontal-tb">Horizontal</option>
+                        <option value="vertical-rl">Vertical</option>
+                      </select>
+                    </label>
                   </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={saveGlobalDefaults}
+                    >
+                      Save defaults
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={loadGlobalDefaults}
+                    >
+                      Apply defaults
+                    </Button>
+                  </div>
+                </section>
+
+                <section className="space-y-3">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Typography
+                  </h3>
+                  <label className="space-y-1">
+                    <span className="text-xs text-muted-foreground">Font</span>
+                    <select
+                      value={fontFamily}
+                      onChange={(event) => setFontFamily(event.target.value)}
+                      className="h-9 w-full rounded-md border border-border bg-background px-2"
+                    >
+                      <option value="Merriweather, Georgia, serif">
+                        Merriweather (default)
+                      </option>
+                      <option value="Lora, Georgia, serif">Lora</option>
+                      <option value="Georgia, serif">Georgia</option>
+                      <option value="serif">System serif</option>
+                      <option value="system-ui, sans-serif">
+                        System sans-serif
+                      </option>
+                      <option value="Atkinson Hyperlegible, sans-serif">
+                        Atkinson Hyperlegible
+                      </option>
+                      <option value="monospace">Monospace</option>
+                      {(customFonts.data?.items ?? []).length > 0 && (
+                        <optgroup label="Your fonts">
+                          {(customFonts.data?.items ?? []).map((f) => (
+                            <option
+                              key={f.id}
+                              value={JSON.stringify(f.name).slice(1, -1)}
+                            >
+                              {f.name}
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
+                    </select>
+                  </label>
+                  <CustomFontUploader fonts={customFonts.data?.items ?? []} />
+                  <label className="space-y-1">
+                    <span className="text-xs text-muted-foreground">
+                      Line height {lineHeight.toFixed(1)}
+                    </span>
+                    <input
+                      type="range"
+                      min="1.1"
+                      max="2.4"
+                      step="0.1"
+                      value={lineHeight}
+                      onChange={(event) =>
+                        setLineHeight(Number(event.target.value))
+                      }
+                      className="w-full"
+                    />
+                  </label>
+                  <label className="space-y-1">
+                    <span className="text-xs text-muted-foreground">
+                      Margin {margin}px
+                    </span>
+                    <input
+                      type="range"
+                      min="0"
+                      max="88"
+                      step="4"
+                      value={margin}
+                      onChange={(event) =>
+                        setMargin(Number(event.target.value))
+                      }
+                      className="w-full"
+                    />
+                  </label>
+                  <label className="space-y-1">
+                    <span className="text-xs text-muted-foreground">
+                      Max width {maxWidth}ch
+                    </span>
+                    <input
+                      type="range"
+                      min="42"
+                      max="120"
+                      step="2"
+                      value={maxWidth}
+                      onChange={(event) =>
+                        setMaxWidth(Number(event.target.value))
+                      }
+                      className="w-full"
+                    />
+                  </label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <label className="space-y-1">
+                      <span className="text-xs text-muted-foreground">
+                        Weight {fontWeight}
+                      </span>
+                      <input
+                        type="range"
+                        min="300"
+                        max="800"
+                        step="100"
+                        value={fontWeight}
+                        onChange={(event) =>
+                          setFontWeight(Number(event.target.value))
+                        }
+                        className="w-full"
+                      />
+                    </label>
+                    <label className="space-y-1">
+                      <span className="text-xs text-muted-foreground">
+                        Zoom {zoom}%
+                      </span>
+                      <input
+                        type="range"
+                        min="50"
+                        max="200"
+                        step="10"
+                        value={zoom}
+                        onChange={(event) =>
+                          setZoom(Number(event.target.value))
+                        }
+                        className="w-full"
+                      />
+                    </label>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <label className="flex items-center gap-2 text-xs">
+                      <input
+                        type="checkbox"
+                        checked={hyphenation}
+                        onChange={(event) =>
+                          setHyphenation(event.target.checked)
+                        }
+                      />
+                      Hyphenation
+                    </label>
+                    <label className="flex items-center gap-2 text-xs">
+                      <input
+                        type="checkbox"
+                        checked={rtl}
+                        onChange={(event) => setRtl(event.target.checked)}
+                      />
+                      RTL
+                    </label>
+                  </div>
+                </section>
+
+                <section className="space-y-3 rounded-md border border-border bg-background p-3">
+                  <h3 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    <Volume2 className="size-4" />
+                    Read aloud
+                  </h3>
                   <label className="space-y-1">
                     <span className="text-xs text-muted-foreground">
                       Rate {ttsRate.toFixed(1)}
@@ -2071,7 +2147,7 @@ export default function Reader() {
                   <select
                     value={ttsVoice}
                     onChange={(event) => setTtsVoice(event.target.value)}
-                    className="mt-2 h-9 w-full rounded-md border border-border bg-background px-2"
+                    className="h-9 w-full rounded-md border border-border bg-background px-2"
                     aria-label="TTS voice"
                   >
                     <option value="">Default voice</option>
@@ -2081,7 +2157,7 @@ export default function Reader() {
                       </option>
                     ))}
                   </select>
-                  <div className="mt-2 grid grid-cols-4 gap-1">
+                  <div className="grid grid-cols-4 gap-1">
                     <Button
                       size="icon"
                       variant="ghost"
@@ -2113,7 +2189,7 @@ export default function Reader() {
                     </Button>
                     <Button
                       size="icon"
-                      variant="ghost"
+                      variant={ttsActive ? "secondary" : "ghost"}
                       onClick={toggleTts}
                       aria-label="Start or stop TTS"
                     >
@@ -2124,7 +2200,7 @@ export default function Reader() {
                       )}
                     </Button>
                   </div>
-                  <label className="mt-2 flex items-center gap-2">
+                  <label className="flex items-center gap-2">
                     <Timer className="size-4 text-muted-foreground" />
                     <select
                       value={ttsSleepMinutes}
@@ -2141,23 +2217,31 @@ export default function Reader() {
                       <option value={60}>60 minutes</option>
                     </select>
                   </label>
-                </div>
-                <div className="rounded-md border border-border bg-background p-3">
-                  <div className="mb-2 text-xs font-medium text-muted-foreground">
-                    RSVP speed {rsvpWpm} WPM
-                  </div>
-                  <input
-                    type="range"
-                    min="120"
-                    max="700"
-                    step="20"
-                    value={rsvpWpm}
-                    onChange={(event) => setRsvpWpm(Number(event.target.value))}
-                    className="w-full"
-                  />
+                </section>
+
+                <section className="space-y-3 rounded-md border border-border bg-background p-3">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Speed reading (RSVP)
+                  </h3>
+                  <label className="space-y-1">
+                    <span className="text-xs text-muted-foreground">
+                      {rsvpWpm} WPM
+                    </span>
+                    <input
+                      type="range"
+                      min="120"
+                      max="700"
+                      step="20"
+                      value={rsvpWpm}
+                      onChange={(event) =>
+                        setRsvpWpm(Number(event.target.value))
+                      }
+                      className="w-full"
+                    />
+                  </label>
                   <Button
                     size="sm"
-                    className="mt-2 w-full"
+                    className="w-full"
                     variant={rsvpActive ? "secondary" : "default"}
                     onClick={() =>
                       rsvpActive ? setRsvpActive(false) : startRsvp()
@@ -2165,11 +2249,12 @@ export default function Reader() {
                   >
                     {rsvpActive ? "Stop RSVP" : "Start RSVP"}
                   </Button>
-                </div>
-                <div className="rounded-md border border-border bg-background p-3">
-                  <div className="mb-2 text-xs font-medium text-muted-foreground">
+                </section>
+
+                <section className="space-y-3 rounded-md border border-border bg-background p-3">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                     Annotation backup
-                  </div>
+                  </h3>
                   <div className="grid grid-cols-2 gap-2">
                     <Button
                       size="sm"
@@ -2178,7 +2263,7 @@ export default function Reader() {
                     >
                       Export JSON
                     </Button>
-                    <label className="inline-flex h-9 cursor-pointer items-center justify-center rounded-md border border-border px-2 text-xs hover:bg-accent">
+                    <label className="inline-flex h-8 cursor-pointer items-center justify-center rounded-md border border-border px-3 text-xs hover:bg-accent">
                       Import JSON
                       <input
                         type="file"
@@ -2191,11 +2276,44 @@ export default function Reader() {
                       />
                     </label>
                   </div>
-                </div>
-                <div className="rounded-md border border-border bg-background p-3">
-                  <div className="mb-2 text-xs font-medium text-muted-foreground">
-                    Diagnostics
+                </section>
+
+                <section className="space-y-3 rounded-md border border-border bg-background p-3">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    KOReader bridge
+                  </h3>
+                  {externalProgress ? (
+                    <div className="rounded border border-border px-2 py-1 text-xs text-muted-foreground">
+                      Linked document {externalProgress.document}; latest{" "}
+                      {Math.round((externalProgress.percentage ?? 0) * 100)}%
+                      {externalProgress.canResume
+                        ? " with CFI resume"
+                        : " without CFI resume"}
+                    </div>
+                  ) : null}
+                  <div className="flex gap-2">
+                    <input
+                      value={kosyncDocument}
+                      onChange={(event) =>
+                        setKosyncDocument(event.target.value)
+                      }
+                      placeholder="KOReader document id"
+                      className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-xs"
+                    />
+                    <Button
+                      size="sm"
+                      disabled={!kosyncDocument.trim()}
+                      onClick={() => void saveKosyncLink()}
+                    >
+                      Link
+                    </Button>
                   </div>
+                </section>
+
+                <section className="space-y-3 rounded-md border border-border bg-background p-3">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Diagnostics
+                  </h3>
                   <div className="max-h-40 space-y-2 overflow-y-auto">
                     {diagnostics.length ? (
                       diagnostics.map((entry) => (
@@ -2222,38 +2340,7 @@ export default function Reader() {
                       </p>
                     )}
                   </div>
-                </div>
-                <div className="rounded-md border border-border bg-background p-3">
-                  <div className="mb-2 text-xs font-medium text-muted-foreground">
-                    KOReader bridge
-                  </div>
-                  {externalProgress ? (
-                    <div className="mb-3 rounded border border-border px-2 py-1 text-xs text-muted-foreground">
-                      Linked document {externalProgress.document}; latest{" "}
-                      {Math.round((externalProgress.percentage ?? 0) * 100)}%
-                      {externalProgress.canResume
-                        ? " with CFI resume"
-                        : " without CFI resume"}
-                    </div>
-                  ) : null}
-                  <div className="flex gap-2">
-                    <input
-                      value={kosyncDocument}
-                      onChange={(event) =>
-                        setKosyncDocument(event.target.value)
-                      }
-                      placeholder="KOReader document id"
-                      className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-xs"
-                    />
-                    <Button
-                      size="sm"
-                      disabled={!kosyncDocument.trim()}
-                      onClick={() => void saveKosyncLink()}
-                    >
-                      Link
-                    </Button>
-                  </div>
-                </div>
+                </section>
               </div>
             ) : null}
           </aside>
@@ -2405,8 +2492,37 @@ export default function Reader() {
       ) : null}
       {readingRuler ? (
         <div
-          className="pointer-events-none fixed left-0 right-0 top-1/2 z-30 h-12 -translate-y-1/2 border-y border-yellow-400/60 bg-yellow-200/20"
-          aria-hidden="true"
+          role="separator"
+          aria-label="Reading ruler — drag vertically to reposition"
+          aria-orientation="horizontal"
+          className="fixed left-0 right-0 z-30 -translate-y-1/2 cursor-ns-resize touch-none select-none border-y border-yellow-400/60 bg-yellow-200/20"
+          style={{
+            top: `${rulerTop}%`,
+            // One line of body text ≈ 16px * fontSize% * lineHeight; add a
+            // few px of padding so the band visually frames the line.
+            height: `${Math.min(96, Math.max(28, Math.round(16 * (fontSize / 100) * lineHeight) + 6))}px`,
+          }}
+          onPointerDown={(event) => {
+            event.preventDefault();
+            const bandRect = event.currentTarget.getBoundingClientRect();
+            const offsetY = event.clientY - (bandRect.top + bandRect.height / 2);
+            rulerDragRef.current = { offsetY };
+            event.currentTarget.setPointerCapture(event.pointerId);
+          }}
+          onPointerMove={(event) => {
+            if (!rulerDragRef.current) return;
+            const offsetY = rulerDragRef.current.offsetY;
+            const next =
+              ((event.clientY - offsetY) / window.innerHeight) * 100;
+            setRulerTop(Math.min(100, Math.max(0, next)));
+          }}
+          onPointerUp={(event) => {
+            rulerDragRef.current = null;
+            event.currentTarget.releasePointerCapture(event.pointerId);
+          }}
+          onPointerCancel={() => {
+            rulerDragRef.current = null;
+          }}
         />
       ) : null}
       {rsvpActive ? (

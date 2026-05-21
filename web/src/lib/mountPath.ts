@@ -8,5 +8,7 @@ export function extractMountPath(pathname: string): string {
 }
 
 export function mountPath(): string {
+  const fromEnv = import.meta.env.VITE_API_BASE as string | undefined;
+  if (fromEnv) return fromEnv;
   return extractMountPath(window.location.pathname);
 }

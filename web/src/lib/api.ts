@@ -1,6 +1,10 @@
 // API base is /api/v1/plugins/{installationId}, detected at runtime since
 // the installation ID is assigned at install time (not known at build time).
+// In dev (vite), an explicit VITE_API_BASE can hardcode the prefix because
+// the SPA isn't loaded under that URL — see vite.config.ts proxy.
 function apiBase(): string {
+  const fromEnv = import.meta.env.VITE_API_BASE as string | undefined;
+  if (fromEnv) return fromEnv;
   const m = window.location.pathname.match(/^(\/api\/v1\/plugins\/\d+)/);
   return m ? m[1] : "";
 }

@@ -84,6 +84,7 @@ type Props = {
   fileUrl?: string;
   settings?: {
     flow?: "paginated" | "scrolled";
+    fontBrightness?: number;
     fontFamily?: string;
     fontSize?: number;
     fontWeight?: number;
@@ -91,7 +92,6 @@ type Props = {
     lineHeight?: number;
     margin?: number;
     maxWidth?: number;
-    paragraphFocus?: boolean;
     rtl?: boolean;
     spread?: "auto" | "none";
     theme?: "light" | "sepia" | "dark";
@@ -192,7 +192,6 @@ export const ReadestLiteReader = forwardRef<ReadestLiteReaderHandle, Props>(
     const serviceRef = useRef<ContinuumReaderService | null>(null);
     const annotationsRef = useRef<Annotation[]>(annotations);
     const drawnCfisRef = useRef<Set<string>>(new Set());
-    const paragraphFocusCleanupRef = useRef<(() => void)[]>([]);
     const selectionCleanupRef = useRef<(() => void)[]>([]);
     const [error, setError] = useState("");
     const [loading, setLoading] = useState(true);
@@ -233,13 +232,16 @@ export const ReadestLiteReader = forwardRef<ReadestLiteReaderHandle, Props>(
     };
 
     const readerStyles = () => {
+      const fontBrightness = Math.min(
+        200,
+        Math.max(40, settings?.fontBrightness ?? 100),
+      );
       const fontSize = settings?.fontSize ?? 100;
       const fontFamily = settings?.fontFamily ?? "inherit";
       const fontWeight = settings?.fontWeight ?? 400;
       const hyphenation = settings?.hyphenation ?? true;
       const lineHeight = settings?.lineHeight ?? 1.6;
       const maxWidth = settings?.maxWidth ?? 72;
-      const paragraphFocus = settings?.paragraphFocus ?? false;
       const rtl = settings?.rtl ?? false;
       const writingMode = settings?.writingMode ?? "auto";
       const theme = settings?.theme ?? "light";
@@ -249,10 +251,30 @@ export const ReadestLiteReader = forwardRef<ReadestLiteReaderHandle, Props>(
           : theme === "sepia"
             ? { bg: "#f4ecd8", fg: "#1f1b16", link: "#8a4b12" }
             : { bg: "#ffffff", fg: "#171717", link: "#2563eb" };
+      // Brightness blends the theme fg toward two extremes:
+      //   <100 → mix toward the bg (text fades into the page)
+      //   100  → pure palette.fg (theme default)
+      //   >100 → mix toward the contrast extreme (pure white on dark, black
+      //          otherwise) so it's actually brighter / higher contrast.
+      const boost = theme === "dark" ? "#ffffff" : "#000000";
+      const dimmedFg =
+        fontBrightness <= 100
+          ? `color-mix(in srgb, ${palette.fg} ${fontBrightness}%, ${palette.bg})`
+          : `color-mix(in srgb, ${palette.fg} ${200 - fontBrightness}%, ${boost})`;
+      // foliate-js' paginator reads --theme-bg-color / color-scheme /
+      // --override-color from the iframe's <html> computed style to colour
+      // the gutter/page background grid. Without these, switching to dark
+      // mode leaves white bars in the side margins until the next paginate.
       return `
+        :root {
+          --theme-bg-color: ${palette.bg};
+          --theme-fg-color: ${dimmedFg};
+          --override-color: true;
+          color-scheme: ${theme === "dark" ? "dark" : "light"};
+        }
         html, body {
           background: ${palette.bg} !important;
-          color: ${palette.fg} !important;
+          color: ${dimmedFg} !important;
           direction: ${rtl ? "rtl" : "inherit"} !important;
           font-family: ${fontFamily} !important;
           font-size: ${fontSize}% !important;
@@ -262,19 +284,19 @@ export const ReadestLiteReader = forwardRef<ReadestLiteReaderHandle, Props>(
           max-width: ${maxWidth}ch !important;
           writing-mode: ${writingMode === "auto" ? "inherit" : writingMode} !important;
         }
-        p, li, blockquote { margin-block: 0.75em !important; }
-        ${
-          paragraphFocus
-            ? `body :is(p, li, blockquote, h1, h2, h3, h4, h5, h6) {
-                 opacity: 0.28;
-                 transition: opacity 120ms ease, filter 120ms ease;
-               }
-               body :is(p, li, blockquote, h1, h2, h3, h4, h5, h6)[data-continuum-current-paragraph="true"] {
-                 opacity: 1;
-                 filter: none;
-               }`
-            : ""
+        /*
+          EPUB stylesheets usually pin color on specific tags (p, h1, span...)
+          which beats body { color }. Force the theme foreground onto every
+          text-bearing element so dark mode doesn't render black text on a
+          black background. Skip <a> — its color rule below sets the link
+          colour explicitly.
+        */
+        body :where(p, span, div, li, blockquote, h1, h2, h3, h4, h5, h6,
+                    em, i, strong, b, code, pre, td, th, caption, figcaption,
+                    dt, dd, small, sub, sup, cite, q, mark) {
+          color: ${dimmedFg} !important;
         }
+        p, li, blockquote { margin-block: 0.75em !important; }
         a { color: ${palette.link} !important; }
       `;
     };
@@ -301,7 +323,13 @@ export const ReadestLiteReader = forwardRef<ReadestLiteReaderHandle, Props>(
       );
       renderer.setAttribute("max-inline-size", `${settings?.maxWidth ?? 72}ch`);
       renderer.setAttribute("scale", `${settings?.zoom ?? 100}`);
-      renderer.setAttribute("spread", settings?.spread ?? "auto");
+      // foliate-js' paginator watches `max-column-count` (not `spread`) to
+      // decide single-vs-two-page layout. spread="none" => force 1 column;
+      // anything else => allow up to 2.
+      renderer.setAttribute(
+        "max-column-count",
+        settings?.spread === "none" ? "1" : "2",
+      );
       void renderer.render?.();
     };
 
@@ -379,79 +407,6 @@ export const ReadestLiteReader = forwardRef<ReadestLiteReaderHandle, Props>(
 
     const emitSelectionChange = () => {
       onSelectionChange?.(createSelectionAnnotation());
-    };
-
-    const clearParagraphFocus = () => {
-      const contents = viewRef.current?.renderer?.getContents?.() ?? [];
-      for (const content of contents) {
-        content.doc
-          .querySelectorAll("[data-continuum-current-paragraph]")
-          .forEach((element) =>
-            element.removeAttribute("data-continuum-current-paragraph"),
-          );
-      }
-    };
-
-    const updateParagraphFocus = () => {
-      if (!settings?.paragraphFocus) {
-        clearParagraphFocus();
-        return;
-      }
-      const contents = viewRef.current?.renderer?.getContents?.() ?? [];
-      for (const content of contents) {
-        const doc = content.doc;
-        const candidates = Array.from(
-          doc.querySelectorAll<HTMLElement>(
-            "p, li, blockquote, h1, h2, h3, h4, h5, h6",
-          ),
-        ).filter((element) => element.textContent?.trim());
-        let nearest: HTMLElement | null = null;
-        let nearestDistance = Number.POSITIVE_INFINITY;
-        const midpoint =
-          (doc.defaultView?.innerHeight ?? window.innerHeight) / 2;
-        for (const candidate of candidates) {
-          const rect = candidate.getBoundingClientRect();
-          if (
-            rect.bottom < 0 ||
-            rect.top > (doc.defaultView?.innerHeight ?? 0)
-          ) {
-            continue;
-          }
-          const distance = Math.abs(rect.top + rect.height / 2 - midpoint);
-          if (distance < nearestDistance) {
-            nearest = candidate;
-            nearestDistance = distance;
-          }
-        }
-        for (const candidate of candidates) {
-          if (candidate === nearest) {
-            candidate.setAttribute("data-continuum-current-paragraph", "true");
-          } else {
-            candidate.removeAttribute("data-continuum-current-paragraph");
-          }
-        }
-      }
-    };
-
-    const attachParagraphFocusListeners = () => {
-      for (const cleanup of paragraphFocusCleanupRef.current) cleanup();
-      paragraphFocusCleanupRef.current = [];
-      const contents = viewRef.current?.renderer?.getContents?.() ?? [];
-      for (const content of contents) {
-        const doc = content.doc;
-        const target = doc.defaultView ?? doc;
-        const handler = () =>
-          window.requestAnimationFrame(updateParagraphFocus);
-        target.addEventListener("scroll", handler);
-        doc.addEventListener("pointermove", handler);
-        doc.addEventListener("keyup", handler);
-        paragraphFocusCleanupRef.current.push(() => {
-          target.removeEventListener("scroll", handler);
-          doc.removeEventListener("pointermove", handler);
-          doc.removeEventListener("keyup", handler);
-        });
-      }
-      updateParagraphFocus();
     };
 
     const attachSelectionListeners = () => {
@@ -627,7 +582,6 @@ export const ReadestLiteReader = forwardRef<ReadestLiteReaderHandle, Props>(
 
           view.addEventListener("create-overlay", () => {
             attachSelectionListeners();
-            attachParagraphFocusListeners();
             drawAnnotations();
           });
 
@@ -653,7 +607,6 @@ export const ReadestLiteReader = forwardRef<ReadestLiteReaderHandle, Props>(
             };
             configRef.current = nextConfig;
             onProgress?.({ cfi: location, percentage: (current + 1) / total });
-            updateParagraphFocus();
             scheduleProgressSave(nextConfig);
           });
 
@@ -674,7 +627,6 @@ export const ReadestLiteReader = forwardRef<ReadestLiteReaderHandle, Props>(
             toc: book.toc ?? [],
           });
           attachSelectionListeners();
-          attachParagraphFocusListeners();
           drawAnnotations();
           const lastLocation =
             typeof config.location === "string" && config.location.length > 0
@@ -717,8 +669,6 @@ export const ReadestLiteReader = forwardRef<ReadestLiteReaderHandle, Props>(
         viewRef.current = null;
         serviceRef.current = null;
         drawnCfisRef.current.clear();
-        for (const cleanup of paragraphFocusCleanupRef.current) cleanup();
-        paragraphFocusCleanupRef.current = [];
         for (const cleanup of selectionCleanupRef.current) cleanup();
         selectionCleanupRef.current = [];
       };
@@ -740,9 +690,9 @@ export const ReadestLiteReader = forwardRef<ReadestLiteReaderHandle, Props>(
 
     useEffect(() => {
       applyReaderSettings();
-      attachParagraphFocusListeners();
     }, [
       settings?.flow,
+      settings?.fontBrightness,
       settings?.fontFamily,
       settings?.fontSize,
       settings?.fontWeight,
@@ -750,7 +700,6 @@ export const ReadestLiteReader = forwardRef<ReadestLiteReaderHandle, Props>(
       settings?.lineHeight,
       settings?.margin,
       settings?.maxWidth,
-      settings?.paragraphFocus,
       settings?.rtl,
       settings?.spread,
       settings?.theme,
@@ -774,10 +723,20 @@ export const ReadestLiteReader = forwardRef<ReadestLiteReaderHandle, Props>(
         : settings?.theme === "sepia"
           ? "#1f1b16"
           : "#171717";
+    // Above 100, color-mix can't push the fg past pure white/black, so add a
+    // CSS contrast filter on the wrapper. contrast(>100%) sharpens fg vs bg,
+    // which reads as "brighter" text in dark mode and bolder text in light.
+    const brightness = Math.min(200, Math.max(40, settings?.fontBrightness ?? 100));
+    const wrapperFilter =
+      brightness > 100 ? `contrast(${brightness}%)` : undefined;
     return (
       <div
         className="relative h-full w-full overflow-hidden"
-        style={{ backgroundColor: outerBg, color: outerFg }}
+        style={{
+          backgroundColor: outerBg,
+          color: outerFg,
+          filter: wrapperFilter,
+        }}
       >
         <div ref={containerRef} className="h-full w-full" />
         {loading && !error ? (
