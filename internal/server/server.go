@@ -99,6 +99,7 @@ func (s *Server) Handler() http.Handler {
 		s.mountEnrichRoutes(r)
 		s.mountCustomFontRoutes(r)
 		s.mountNotebookRoutes(r)
+		s.mountCustomMetadataProviderRoutes(r)
 		r.Group(func(r chi.Router) {
 			r.Use(auth.RequireAdmin)
 			s.mountAdminRoutes(r)
