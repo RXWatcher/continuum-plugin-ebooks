@@ -42,12 +42,14 @@ import {
   getReaderConfig,
   linkKosyncBook,
   listAnnotations,
+  listCustomFonts,
   mountPath,
   putReaderConfig,
   updateAnnotation,
   type Annotation,
   type ExternalReaderProgress,
 } from "@/lib/api";
+import CustomFontUploader from "@/components/CustomFontUploader";
 import { Button } from "@/components/ui/button";
 import {
   ReadestLiteReader,
@@ -236,6 +238,34 @@ export default function Reader() {
     queryFn: () => listAnnotations(id),
     enabled: !!id,
   });
+
+  // Custom fonts — the user's uploaded TTF / OTF / WOFF files. We
+  // inject one @font-face rule per font into a style tag so the
+  // reader's existing font-family picker can name them. The URL
+  // already carries the mount path; the browser caches aggressively
+  // once it's pulled the bytes.
+  const customFonts = useQuery({
+    queryKey: ["custom-fonts"],
+    queryFn: listCustomFonts,
+  });
+  useEffect(() => {
+    const items = customFonts.data?.items ?? [];
+    if (items.length === 0) return;
+    const tag = document.createElement("style");
+    tag.setAttribute("data-continuum-custom-fonts", "1");
+    tag.textContent = items
+      .map(
+        (f) =>
+          `@font-face { font-family: ${JSON.stringify(f.name)}; src: url(${JSON.stringify(
+            f.url,
+          )}); font-display: swap; }`,
+      )
+      .join("\n");
+    document.head.appendChild(tag);
+    return () => {
+      document.head.removeChild(tag);
+    };
+  }, [customFonts.data?.items]);
 
   useEffect(() => {
     const files = detail.data?.files ?? [];
@@ -1868,8 +1898,18 @@ export default function Reader() {
                     <option value="system-ui, sans-serif">System sans-serif</option>
                     <option value="Atkinson Hyperlegible, sans-serif">Atkinson Hyperlegible</option>
                     <option value="monospace">Monospace</option>
+                    {(customFonts.data?.items ?? []).length > 0 && (
+                      <optgroup label="Your fonts">
+                        {(customFonts.data?.items ?? []).map((f) => (
+                          <option key={f.id} value={JSON.stringify(f.name).slice(1, -1)}>
+                            {f.name}
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
                   </select>
                 </label>
+                <CustomFontUploader fonts={customFonts.data?.items ?? []} />
                 <label className="space-y-1">
                   <span className="text-xs text-muted-foreground">
                     Line height {lineHeight.toFixed(1)}

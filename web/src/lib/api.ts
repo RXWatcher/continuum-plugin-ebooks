@@ -142,9 +142,27 @@ async function call<T>(
   return await res.json();
 }
 
+async function callForm<T>(method: string, path: string, form: FormData): Promise<T> {
+  // Multipart needs the browser to set the boundary header; we
+  // explicitly omit Content-Type so fetch fills it in.
+  const res = await authedFetch(`${apiBase()}${path}`, {
+    method,
+    body: form,
+  });
+  if (!res.ok) {
+    const err = await res
+      .json()
+      .catch(() => ({ error: { message: res.statusText } }));
+    throw new Error(err.error?.message ?? "Request failed");
+  }
+  if (res.status === 204) return undefined as T;
+  return await res.json();
+}
+
 export const api = {
   get: <T>(p: string) => call<T>("GET", p),
   post: <T>(p: string, body?: unknown) => call<T>("POST", p, body),
+  postForm: <T>(p: string, form: FormData) => callForm<T>("POST", p, form),
   patch: <T>(p: string, body?: unknown) => call<T>("PATCH", p, body),
   put: <T>(p: string, body?: unknown) => call<T>("PUT", p, body),
   delete: <T>(p: string) => call<T>("DELETE", p),
@@ -745,6 +763,33 @@ export const listShareLinks = () =>
 
 export const deleteShareLink = (id: string) =>
   api.delete(`/api/v1/me/share-links/${encodeURIComponent(id)}`);
+
+// -- Custom fonts ---------------------------------------------------------
+
+export type CustomFont = {
+  id: string;
+  name: string;
+  mime: string;
+  size_bytes: number;
+  url: string;
+  created_at?: number;
+};
+
+export const listCustomFonts = () =>
+  api.get<{ items: CustomFont[] }>(`/api/v1/me/fonts`);
+
+export const uploadCustomFont = async (file: File, name?: string) => {
+  const form = new FormData();
+  form.append("file", file);
+  if (name) form.append("name", name);
+  // The plugin's api wrapper hand-rolls JSON content-types, so for
+  // multipart we go through fetch directly with the auth header
+  // captured the same way the wrapper does.
+  return api.postForm<CustomFont>(`/api/v1/me/fonts`, form);
+};
+
+export const deleteCustomFont = (id: string) =>
+  api.delete(`/api/v1/me/fonts/${encodeURIComponent(id)}`);
 
 // -- Per-book activity timeline -----------------------------------------
 
