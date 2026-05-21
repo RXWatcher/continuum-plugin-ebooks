@@ -69,6 +69,13 @@
       "cron": "0 * * * *"
     },
     {
+      "type": "scheduled_task.v1",
+      "id": "purge_expired",
+      "display_name": "Purge expired share links + recommendation cache",
+      "description": "Drops share_link rows past their expires_at and ebook_recommendation_cache rows past their TTL. Idempotent.",
+      "cron": "0 */6 * * *"
+    },
+    {
       "type": "request_router.v1",
       "id": "ebooks",
       "display_name": "Route ebook requests"

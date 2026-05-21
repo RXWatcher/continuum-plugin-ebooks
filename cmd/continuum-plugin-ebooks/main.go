@@ -94,6 +94,7 @@ func main() {
 			"opds_token_pruner":   t.OPDSTokenPruner,
 			"kindle_send_retrier": t.KindleSendRetrier,
 			"portal_library_sync": t.PortalLibrarySync,
+			"purge_expired":       t.PurgeExpired,
 		}
 	})
 

@@ -388,3 +388,23 @@ func isPluginHTTPUnsupported(err error) bool {
 	return strings.Contains(msg, "code = Unimplemented") &&
 		strings.Contains(msg, "CallPluginHTTP")
 }
+
+// PurgeExpired runs the once-per-period cleanup pass. Drops share
+// link rows past their expiry + recommendation_cache rows past
+// their TTL. Both stores are idempotent on re-run.
+func (t *Tasks) PurgeExpired(ctx context.Context) error {
+	if t.Store == nil {
+		return nil
+	}
+	if n, err := t.Store.PurgeExpiredShareLinks(ctx); err == nil && n > 0 {
+		t.Log.Info("purged expired share_links", "count", n)
+	} else if err != nil {
+		t.Log.Warn("purge share_links", "err", err.Error())
+	}
+	if n, err := t.Store.PurgeExpiredEbookRecommendations(ctx); err == nil && n > 0 {
+		t.Log.Info("purged expired ebook_recommendation_cache", "count", n)
+	} else if err != nil {
+		t.Log.Warn("purge ebook_recommendation_cache", "err", err.Error())
+	}
+	return nil
+}
