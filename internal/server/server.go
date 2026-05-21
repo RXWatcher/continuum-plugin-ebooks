@@ -108,6 +108,7 @@ func (s *Server) Handler() http.Handler {
 		s.mountYearStatsRoutes(r)
 		s.mountNotificationPrefRoutes(r)
 		s.mountAuditLogRoutes(r)
+		s.mountImportRoutes(r)
 		r.Group(func(r chi.Router) {
 			r.Use(auth.RequireAdmin)
 			s.mountAdminRoutes(r)
