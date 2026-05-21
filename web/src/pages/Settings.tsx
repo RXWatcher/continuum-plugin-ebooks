@@ -1,7 +1,17 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Bell, CheckCircle2, Mail, Plus, Smartphone, Trash2, XCircle } from "lucide-react";
+import {
+  Bell,
+  CheckCircle2,
+  Copy,
+  Link2,
+  Mail,
+  Plus,
+  Smartphone,
+  Trash2,
+  XCircle,
+} from "lucide-react";
 import {
   checkHardcoverAuth,
   checkReadwiseAuth,
@@ -9,15 +19,18 @@ import {
   deleteEreaderDevice,
   deleteHardcoverToken,
   deleteReadwiseToken,
+  deleteShareLink,
   getHardcoverToken,
   getNotificationCatalog,
   getReadwiseToken,
   listEreaderDevices,
   listNotificationPrefs,
+  listShareLinks,
   putHardcoverToken,
   putNotificationPref,
   putReadwiseToken,
   type EreaderDevice,
+  type ShareLink,
 } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -59,8 +72,107 @@ export default function Settings() {
       <EreaderDevicesCard />
       <ReadwiseCard />
       <HardcoverCard />
+      <ShareLinksCard />
       <NotificationPrefsCard />
     </div>
+  );
+}
+
+function ShareLinksCard() {
+  const qc = useQueryClient();
+  const links = useQuery({
+    queryKey: ["share-links"],
+    queryFn: listShareLinks,
+  });
+  const remove = useMutation({
+    mutationFn: (id: string) => deleteShareLink(id),
+    onSuccess: () => {
+      toast.success("Share link revoked");
+      qc.invalidateQueries({ queryKey: ["share-links"] });
+    },
+    onError: (err) => toast.error(`Revoke failed: ${err}`),
+  });
+
+  return (
+    <Card className="bg-surface p-4">
+      <div className="mb-4 flex items-center gap-2">
+        <Link2 className="size-5" />
+        <h3 className="font-medium">Share links</h3>
+      </div>
+      <p className="text-muted-foreground mb-3 text-xs">
+        Anyone with one of these links can open the linked book until it
+        expires or hits the use cap. Revoking instantly disables a link.
+      </p>
+
+      {links.isLoading ? (
+        <Skeleton className="h-20 w-full" />
+      ) : (links.data?.items ?? []).length === 0 ? (
+        <p className="text-muted-foreground text-sm">No share links yet.</p>
+      ) : (
+        <ul className="space-y-2">
+          {links.data!.items.map((l) => (
+            <ShareLinkRow
+              key={l.id}
+              link={l}
+              onDelete={() => remove.mutate(l.id)}
+            />
+          ))}
+        </ul>
+      )}
+    </Card>
+  );
+}
+
+function ShareLinkRow({
+  link,
+  onDelete,
+}: {
+  link: ShareLink;
+  onDelete: () => void;
+}) {
+  const url = `${window.location.origin}/share/${link.slug}`;
+  const expiresInDays = link.expires_at
+    ? Math.max(
+        0,
+        Math.ceil(
+          (new Date(link.expires_at).getTime() - Date.now()) /
+            (1000 * 60 * 60 * 24),
+        ),
+      )
+    : null;
+  const usesRemaining =
+    link.max_uses > 0 ? Math.max(0, link.max_uses - link.use_count) : null;
+  return (
+    <li className="bg-background flex items-center justify-between gap-2 rounded-md border border-dashed p-3 text-sm">
+      <div className="min-w-0 flex-1">
+        <div className="truncate font-medium">{link.item_id}</div>
+        <div className="text-muted-foreground text-xs">
+          {expiresInDays !== null
+            ? `Expires in ${expiresInDays} day${expiresInDays === 1 ? "" : "s"}`
+            : "No expiry"}
+          {" · "}
+          {usesRemaining !== null
+            ? `${usesRemaining} use${usesRemaining === 1 ? "" : "s"} left`
+            : `${link.use_count} opens`}
+        </div>
+      </div>
+      <Button
+        size="icon"
+        variant="ghost"
+        title="Copy link"
+        onClick={() => {
+          navigator.clipboard.writeText(url).then(
+            () => toast.success("Link copied"),
+            () => toast.error("Copy failed"),
+          );
+        }}
+      >
+        <Copy className="size-4" />
+      </Button>
+      <Button size="icon" variant="ghost" title="Revoke" onClick={onDelete}>
+        <Trash2 className="size-4" />
+      </Button>
+    </li>
   );
 }
 

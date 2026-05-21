@@ -727,6 +727,25 @@ export const checkHardcoverAuth = () =>
     {},
   );
 
+// -- Share links ---------------------------------------------------------
+
+export type ShareLink = {
+  id: string;
+  user_id: string;
+  slug: string;
+  item_id: string;
+  expires_at: string | null;
+  max_uses: number;
+  use_count: number;
+  created_at: string;
+};
+
+export const listShareLinks = () =>
+  api.get<{ items: ShareLink[] }>(`/api/v1/me/share-links`);
+
+export const deleteShareLink = (id: string) =>
+  api.delete(`/api/v1/me/share-links/${encodeURIComponent(id)}`);
+
 // -- OPDS tokens -----------------------------------------------------------
 
 export type OPDSToken = {
