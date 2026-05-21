@@ -569,6 +569,68 @@ export const updateSmartCollection = (
 export const deleteSmartCollection = (id: string) =>
   api.delete(`/api/v1/me/smart-collections/${encodeURIComponent(id)}`);
 
+// -- Stats — streak + goals + year-in-review ------------------------------
+
+export type ReadingGoal = {
+  user_id: string;
+  year: number;
+  kind: "books" | string;
+  target: number;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type GoalProgress = {
+  year: number;
+  kind: string;
+  target: number;
+  actual: number;
+  percent_complete: number;
+  on_pace_for_target: boolean;
+  days_into_year: number;
+  days_in_year: number;
+};
+
+export type YearStats = {
+  year: number;
+  books_finished: number;
+  distinct_days: number;
+  top_books: {
+    book_id: string;
+    title?: string;
+    authors?: string[];
+    last_read_at?: string;
+    progress?: number;
+  }[];
+};
+
+export const getStreak = () =>
+  api.get<{ current: number; longest: number; last_active_at?: number }>(
+    `/api/v1/me/streak`,
+  );
+
+export const listGoals = (year?: number) =>
+  api.get<{ items: ReadingGoal[] }>(
+    `/api/v1/me/goals${year ? `?year=${year}` : ""}`,
+  );
+
+export const getGoalProgress = (year?: number) =>
+  api.get<{ year: number; goals: GoalProgress[] }>(
+    `/api/v1/me/goals/progress${year ? `?year=${year}` : ""}`,
+  );
+
+export const putGoal = (year: number, kind: string, target: number) =>
+  api.put<ReadingGoal>(
+    `/api/v1/me/goals/${year}/${encodeURIComponent(kind)}`,
+    { target },
+  );
+
+export const deleteGoal = (year: number, kind: string) =>
+  api.delete(`/api/v1/me/goals/${year}/${encodeURIComponent(kind)}`);
+
+export const getYearStats = (year: number) =>
+  api.get<YearStats>(`/api/v1/me/stats/year/${year}`);
+
 // -- OPDS tokens -----------------------------------------------------------
 
 export type OPDSToken = {
