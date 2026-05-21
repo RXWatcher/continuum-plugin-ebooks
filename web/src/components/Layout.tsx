@@ -14,12 +14,15 @@ import {
 import { cn } from "@/lib/utils";
 import SearchBar from "./SearchBar";
 import { CommandPaletteProvider, useCommandPalette } from "./CommandPalette";
+import { ShortcutHelpProvider } from "./ShortcutHelp";
 
 export default function Layout() {
   return (
-    <CommandPaletteProvider>
-      <LayoutInner />
-    </CommandPaletteProvider>
+    <ShortcutHelpProvider>
+      <CommandPaletteProvider>
+        <LayoutInner />
+      </CommandPaletteProvider>
+    </ShortcutHelpProvider>
   );
 }
 
