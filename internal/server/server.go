@@ -19,6 +19,15 @@ import (
 	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/streaming"
 )
 
+var pwaContentTypes = map[string]string{
+	"/manifest.webmanifest": "application/manifest+json; charset=utf-8",
+	"/sw.js":                "application/javascript; charset=utf-8",
+	"/icon.svg":             "image/svg+xml",
+	"/icon-192.png":         "image/png",
+	"/icon-512.png":         "image/png",
+	"/apple-touch-icon.png": "image/png",
+}
+
 type Deps struct {
 	Store        *store.Store
 	Host         *backend.HostHTTPClient
@@ -30,6 +39,10 @@ type Deps struct {
 	// files. If nil, the serve path still works but evictions are unguarded.
 	KoboRefs *koboref.Registry
 	WebFS    http.FileSystem
+	// Recommender powers GET /me/books/{id}/similar. nil means
+	// embeddings aren't configured and the route returns empty
+	// results (200 with items=[]).
+	Recommender Recommender
 }
 
 type EventPublisher interface {
@@ -80,12 +93,18 @@ func (s *Server) Handler() http.Handler {
 		})
 	})
 
-	// SPA fallback
+	// SPA fallback. Content types for PWA assets are pre-set because plugins
+	// run in a minimal container with no /etc/mime.types and Go's mime
+	// fallback returns text/plain for .webmanifest, which the browser then
+	// refuses to register as either a manifest or a service worker.
 	if s.deps.WebFS != nil {
 		fileSrv := http.FileServer(s.deps.WebFS)
 		r.NotFound(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 			if strings.HasPrefix(req.URL.Path, "/admin/assets/") {
 				req.URL.Path = req.URL.Path[len("/admin"):]
+			}
+			if ct, ok := pwaContentTypes[req.URL.Path]; ok {
+				w.Header().Set("Content-Type", ct)
 			}
 			f, err := s.deps.WebFS.Open(req.URL.Path)
 			if err != nil {

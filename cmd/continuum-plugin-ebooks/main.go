@@ -27,6 +27,7 @@ import (
 	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/event"
 	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/httproutes"
 	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/koboref"
+	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/recommend"
 	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/migrate"
 	pluginrt "github.com/ContinuumApp/continuum-plugin-ebooks/internal/runtime"
 	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/scheduler"
@@ -139,7 +140,14 @@ func main() {
 			hostBase = "http://localhost:8080"
 		}
 		hostToken := os.Getenv("CONTINUUM_PLUGIN_TOKEN")
-		host := backend.NewHostHTTPClient(hostBase, hostToken).WithRuntimeHost(sdkruntime.Host())
+		// Don't wire runtimeHost here: continuum's host doesn't implement the
+		// runtime_host CallPluginHTTP RPC yet, so a non-nil client makes every
+		// backend call die with Unimplemented. The host HTTP proxy at
+		// http://localhost:8080/api/v1/plugins/{install_id}/... is the working
+		// path. The audiobooks portal accidentally avoids this by initializing
+		// its client before BindHostBroker is called (sdkruntime.Host() returns
+		// nil there). We do the same explicitly.
+		host := backend.NewHostHTTPClient(hostBase, hostToken)
 
 		ev := event.New(sdkruntime.Host(), logger.Named("event"))
 
@@ -151,6 +159,13 @@ func main() {
 
 		koboRefs := koboref.New()
 
+		// Embedding recommender — Configured() returns false when
+		// EMBEDDING_BASE_URL / EMBEDDING_MODEL aren't set, in which
+		// case the /me/books/{id}/similar route returns empty
+		// results without errors.
+		embedCfg := recommend.LoadConfigFromEnv(os.Getenv)
+		recommender := recommend.New(embedCfg, st, logger)
+
 		srv := server.New(server.Deps{
 			Store:        st,
 			Host:         host,
@@ -159,6 +174,7 @@ func main() {
 			CacheManager: cacheMgr,
 			KoboRefs:     koboRefs,
 			WebFS:        web.FS(),
+			Recommender:  recommender,
 		})
 		httpSrv.SetHandler(srv.Handler())
 

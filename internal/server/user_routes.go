@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"math"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -17,6 +18,7 @@ import (
 
 	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/auth"
 	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/backend"
+	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/mediatoken"
 	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/store"
 	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/streaming"
 )
@@ -36,6 +38,12 @@ func (s *Server) mountUserRoutes(r chi.Router) {
 	r.Post("/me/books/{id}/annotations", s.handleCreateAnnotation)
 	r.Patch("/me/annotations/{annId}", s.handleUpdateAnnotation)
 	r.Delete("/me/annotations/{annId}", s.handleDeleteAnnotation)
+
+	// Embedding-driven similar-items recommendation.
+	r.Get("/me/books/{id}/similar", s.handleSimilarBooks)
+
+	// Rule-based Smart Collections.
+	s.mountSmartCollectionRoutes(r)
 
 	// Catalog (proxied to backend)
 	r.Get("/libraries", s.handleListLibraries)
@@ -174,13 +182,13 @@ type libResult struct {
 //
 // limit <= 0 disables truncation (search path); limit > 0 caps the merged
 // list (list path).
-func combineCatalogResults(results []libResult, limit int) (backend.PageEnvelope[backend.EbookSummary], error) {
+func combineCatalogResults(results []libResult, limit int, userID, secret string) (backend.PageEnvelope[backend.EbookSummary], error) {
 	combined := backend.PageEnvelope[backend.EbookSummary]{Items: []backend.EbookSummary{}}
 	for _, res := range results {
 		if res.err != nil {
 			continue
 		}
-		env := wrapCatalogItems(res.env, res.lib)
+		env := wrapCatalogItems(res.env, res.lib, userID, secret)
 		combined.Items = append(combined.Items, env.Items...)
 		combined.Total += env.Total
 	}
@@ -190,14 +198,85 @@ func combineCatalogResults(results []libResult, limit int) (backend.PageEnvelope
 	return combined, nil
 }
 
-func wrapCatalogItems(env backend.PageEnvelope[backend.EbookSummary], lib store.PortalLibrary) backend.PageEnvelope[backend.EbookSummary] {
+func wrapCatalogItems(env backend.PageEnvelope[backend.EbookSummary], lib store.PortalLibrary, userID, secret string) backend.PageEnvelope[backend.EbookSummary] {
 	for i := range env.Items {
+		backendBookID := env.Items[i].ID
+		env.Items[i].CoverURL = signedCoverURL(env.Items[i].CoverURL, lib.BackendPluginID, userID, backendBookID, secret)
 		env.Items[i].ID = encodeBookRef(lib.ID, env.Items[i].ID)
 		env.Items[i].LibraryID = lib.ID
 		env.Items[i].LibraryName = lib.Name
 		env.Items[i].MediaType = lib.MediaType
 	}
 	return env
+}
+
+// signedCoverURL turns a backend-relative cover URL into a host plugin proxy
+// URL with a short-TTL signed media token in ?token=. Browsers can't send
+// Authorization headers on <img>-tag requests, so the token rides in the URL.
+func signedCoverURL(raw, installID, userID, backendBookID, secret string) string {
+	if raw == "" || installID == "" {
+		return raw
+	}
+	if strings.HasPrefix(raw, "http://") || strings.HasPrefix(raw, "https://") {
+		return raw
+	}
+	out := raw
+	if !strings.HasPrefix(out, "/api/v1/plugins/") {
+		if !strings.HasPrefix(out, "/api/v1/") {
+			if !strings.HasPrefix(out, "/") {
+				out = "/" + out
+			}
+			out = "/api/v1" + out
+		}
+		out = "/api/v1/plugins/" + url.PathEscape(installID) + out
+	}
+	if secret == "" || userID == "" || backendBookID == "" {
+		return out
+	}
+	token, err := mediatoken.Mint(secret, userID, backendBookID, mediatoken.CoverFileIdx)
+	if err != nil {
+		slog.Warn("mint cover token failed", "book_id", backendBookID, "err", err)
+		return out
+	}
+	sep := "?"
+	if strings.Contains(out, "?") {
+		sep = "&"
+	}
+	return out + sep + "token=" + url.QueryEscape(token)
+}
+
+// signedFileURL builds the file URL the SPA puts in <a href> or passes to
+// the reader. Both supported ebook backends store a single file per book
+// and ignore any ?format= query, so the URL doesn't carry format — callers
+// that need the format string for display read it from EbookFile.Format on
+// the catalog response.
+func signedFileURL(installID, userID, backendBookID, secret string) string {
+	if installID == "" || backendBookID == "" {
+		return ""
+	}
+	out := "/api/v1/plugins/" + url.PathEscape(installID) +
+		"/api/v1/file/" + url.PathEscape(backendBookID)
+	if secret == "" || userID == "" {
+		return out
+	}
+	token, err := mediatoken.Mint(secret, userID, backendBookID, mediatoken.FileFileIdx)
+	if err != nil {
+		slog.Warn("mint file token failed", "book_id", backendBookID, "err", err)
+		return out
+	}
+	return out + "?token=" + url.QueryEscape(token)
+}
+
+// mediaSigningContext returns (userID, secret) for the request. Empty values
+// mean callers will return URLs without tokens — the backend then rejects
+// with a clear 401 the operator can debug.
+func (s *Server) mediaSigningContext(r *http.Request) (string, string) {
+	id, _ := auth.FromContext(r.Context())
+	cfg, err := s.deps.Store.GetConfig(r.Context())
+	if err != nil {
+		return id.UserID, ""
+	}
+	return id.UserID, cfg.MediaSigningSecret
 }
 
 // -- library/progress/annotations -----------------------------------------
@@ -488,8 +567,11 @@ func (s *Server) handleUpdateBookMeta(w http.ResponseWriter, r *http.Request) {
 
 // handleStreamFile dispatches to the configured streaming mode. "proxy"
 // pipes bytes live; "cache" looks up (and on miss, single-flight downloads)
-// the file into the LRU-managed cache.
+// the file into the LRU-managed cache. Either mode mints a signed media
+// token before hitting the backend — the backend's file route is public +
+// token-gated, so an unsigned server-side fetch would 401.
 func (s *Server) handleStreamFile(w http.ResponseWriter, r *http.Request) {
+	id, _ := auth.FromContext(r.Context())
 	bookRef := chi.URLParam(r, "id")
 	libraryID, bookID, _ := decodeBookRef(bookRef)
 	lib, err := s.targetLibrary(r, libraryID)
@@ -497,21 +579,23 @@ func (s *Server) handleStreamFile(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 412, err.Error())
 		return
 	}
-	format := r.URL.Query().Get("format")
-	if format == "" {
-		format = "epub"
-	}
 	cfg, err := s.deps.Store.GetConfig(r.Context())
 	if err != nil {
 		writeErr(w, 412, "no backend configured")
 		return
 	}
+	bk := backend.NewEbookBackend(s.deps.Host, lib.BackendPluginID)
+	signedPath := bk.SignedFilePath(id.UserID, bookID, cfg.MediaSigningSecret)
 	mode := streaming.ResolveMode(cfg)
-	if mode == "cache" && s.deps.CacheManager != nil {
-		s.cacheStream(w, r, lib.BackendPluginID, bookID, format)
-		return
+	if mode == "cache" {
+		if s.deps.CacheManager != nil {
+			s.cacheStream(w, r, lib.BackendPluginID, lib.ID, bookID, signedPath)
+			return
+		}
+		slog.Warn("ebooks: cache streaming mode requested but cache manager not initialized; falling back to proxy",
+			"library_id", lib.ID, "book_id", bookID)
 	}
-	streaming.ProxyStream(w, r, s.deps.Host, lib.BackendPluginID, bookID, format)
+	streaming.ProxyStream(w, r, s.deps.Host, lib.BackendPluginID, signedPath)
 }
 
 // cacheStream implements the cache-mode handler. Cache hit → http.ServeFile;
@@ -521,8 +605,14 @@ func (s *Server) handleStreamFile(w http.ResponseWriter, r *http.Request) {
 // of the response so the eviction sweeper can't unlink the file mid-io.Copy.
 // Refcount only blocks NEW evictions — if a past sweep already deleted the
 // file, http.ServeFile returns a normal 404.
-func (s *Server) cacheStream(w http.ResponseWriter, r *http.Request, installID, bookID, format string) {
-	key := streaming.ComputeCacheKey(bookID, format, installID)
+//
+// upstreamPath must already carry a signed ?token= — the backend's file
+// route is public + token-gated, an unsigned fetch would cache a 401 body.
+func (s *Server) cacheStream(w http.ResponseWriter, r *http.Request, installID string, libraryID int64, bookID, upstreamPath string) {
+	// libraryID is part of the cache key so two portal libraries pointing at
+	// the same backend can't collide on book id — without it, switching
+	// libraries would serve cross-library cached bytes until eviction.
+	key := streaming.ComputeCacheKey(bookID, installID, libraryID)
 	m := s.deps.CacheManager
 	if e, ok := m.Lookup(r.Context(), key); ok {
 		release := m.Acquire(e.ID)
@@ -531,9 +621,8 @@ func (s *Server) cacheStream(w http.ResponseWriter, r *http.Request, installID, 
 		serveCacheFile(w, r, m.PathFor(e), e.MimeType)
 		return
 	}
-	bk := backend.NewEbookBackend(s.deps.Host, installID)
 	fetch := func(ctx context.Context) (io.ReadCloser, http.Header, int64, string, error) {
-		upstream, err := s.deps.Host.GetStream(ctx, installID, bk.FilePath(bookID, format), nil)
+		upstream, err := s.deps.Host.GetStream(ctx, installID, upstreamPath, nil)
 		if err != nil {
 			return nil, nil, 0, "", err
 		}
@@ -546,7 +635,7 @@ func (s *Server) cacheStream(w http.ResponseWriter, r *http.Request, installID, 
 		}
 		return upstream.Body, upstream.Header, upstream.ContentLength, upstream.Header.Get("Content-Type"), nil
 	}
-	entry, err := m.StartOrJoin(r.Context(), key, bookID, format, fetch)
+	entry, err := m.StartOrJoin(r.Context(), key, bookID, "", fetch)
 	if err != nil {
 		writeBadGateway(w, r, err)
 		return
@@ -568,7 +657,7 @@ func (s *Server) handleListAnnotations(w http.ResponseWriter, r *http.Request) {
 	id, _ := auth.FromContext(r.Context())
 	bookID := chi.URLParam(r, "id")
 	anns, _ := s.deps.Store.ListAnnotationsByBook(r.Context(), id.UserID, bookID)
-	writeJSON(w, 200, map[string]any{"items": anns})
+	writeItems(w, 200, anns)
 }
 
 func (s *Server) handleCreateAnnotation(w http.ResponseWriter, r *http.Request) {
@@ -677,7 +766,8 @@ func (s *Server) handleListCatalog(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, 200, backend.PageEnvelope[backend.EbookSummary]{Items: []backend.EbookSummary{}})
 			return
 		}
-		writeJSON(w, 200, wrapCatalogItems(env, lib))
+		userID, secret := s.mediaSigningContext(r)
+		writeJSON(w, 200, wrapCatalogItems(env, lib, userID, secret))
 		return
 	}
 	libs, err := s.deps.Store.ListPortalLibraries(r.Context(), true)
@@ -716,7 +806,8 @@ func (s *Server) handleListCatalog(w http.ResponseWriter, r *http.Request) {
 			nextCursors[lib.ID] = env.NextCursor
 		}
 	}
-	combined, err := combineCatalogResults(results, 0)
+	combinedUserID, combinedSecret := s.mediaSigningContext(r)
+	combined, err := combineCatalogResults(results, 0, combinedUserID, combinedSecret)
 	if err != nil {
 		writeBadGateway(w, r, err)
 		return
@@ -736,6 +827,11 @@ func (s *Server) handleGetBook(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeBadGateway(w, r, err)
 		return
+	}
+	userID, secret := s.mediaSigningContext(r)
+	d.CoverURL = signedCoverURL(d.CoverURL, lib.BackendPluginID, userID, backendID, secret)
+	for i := range d.Files {
+		d.Files[i].URL = signedFileURL(lib.BackendPluginID, userID, backendID, secret)
 	}
 	d.ID = encodeBookRef(lib.ID, d.ID)
 	d.LibraryID = lib.ID
@@ -759,7 +855,8 @@ func (s *Server) handleSearchCatalog(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, 200, backend.PageEnvelope[backend.EbookSummary]{Items: []backend.EbookSummary{}})
 			return
 		}
-		writeJSON(w, 200, wrapCatalogItems(env, lib))
+		userID, secret := s.mediaSigningContext(r)
+		writeJSON(w, 200, wrapCatalogItems(env, lib, userID, secret))
 		return
 	}
 	libs, err := s.deps.Store.ListPortalLibraries(r.Context(), true)
@@ -776,7 +873,8 @@ func (s *Server) handleSearchCatalog(w http.ResponseWriter, r *http.Request) {
 		env, err := backend.NewEbookBackend(s.deps.Host, lib.BackendPluginID).Search(r.Context(), query)
 		results = append(results, libResult{lib: lib, env: env, err: err})
 	}
-	combined, err := combineCatalogResults(results, 0)
+	combinedUserID, combinedSecret := s.mediaSigningContext(r)
+	combined, err := combineCatalogResults(results, 0, combinedUserID, combinedSecret)
 	if err != nil {
 		writeBadGateway(w, r, err)
 		return
@@ -873,7 +971,7 @@ func (s *Server) handleBrowseGenres(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleListMyRequests(w http.ResponseWriter, r *http.Request) {
 	id, _ := auth.FromContext(r.Context())
 	rs, _ := s.deps.Store.ListRequestsByUser(r.Context(), id.UserID, 50)
-	writeJSON(w, 200, map[string]any{"items": rs})
+	writeItems(w, 200, rs)
 }
 
 func (s *Server) handleGetMyRequest(w http.ResponseWriter, r *http.Request) {
@@ -1031,7 +1129,11 @@ func (s *Server) handleCancelRequest(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleListMyCollections(w http.ResponseWriter, r *http.Request) {
 	id, _ := auth.FromContext(r.Context())
 	cs, _ := s.deps.Store.ListCollectionsByUser(r.Context(), id.UserID)
-	writeJSON(w, 200, map[string]any{"items": cs})
+	// Use writeItems (nonNilSlice) so nil → []. encoding/json marshals nil
+	// slices as `null`, which crashes SPA code like `data?.items.length`
+	// (optional chaining short-circuits on data being null, but null.length
+	// is still a thrown TypeError).
+	writeItems(w, 200, cs)
 }
 
 func (s *Server) handleCreateCollection(w http.ResponseWriter, r *http.Request) {
