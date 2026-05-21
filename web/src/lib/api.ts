@@ -746,6 +746,25 @@ export const listShareLinks = () =>
 export const deleteShareLink = (id: string) =>
   api.delete(`/api/v1/me/share-links/${encodeURIComponent(id)}`);
 
+// -- Per-book activity timeline -----------------------------------------
+
+export type ActivityEvent = {
+  at: string;
+  kind:
+    | "progress"
+    | "finished"
+    | "rated"
+    | "annotation"
+    | "shared"
+    | string;
+  payload?: Record<string, unknown>;
+};
+
+export const getBookActivity = (bookId: string) =>
+  api.get<{ events: ActivityEvent[] }>(
+    `/api/v1/me/books/${encodeURIComponent(bookId)}/activity`,
+  );
+
 // -- OPDS tokens -----------------------------------------------------------
 
 export type OPDSToken = {

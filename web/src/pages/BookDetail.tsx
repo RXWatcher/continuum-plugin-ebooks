@@ -17,6 +17,7 @@ import {
   mountPath,
   type EbookDetail,
 } from "@/lib/api";
+import BookActivity from "@/components/BookActivity";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -272,6 +273,10 @@ export default function BookDetail() {
             ))}
           </div>
         )}
+
+        <div className="pt-6">
+          <BookActivity bookId={id} />
+        </div>
       </div>
     </div>
   );
