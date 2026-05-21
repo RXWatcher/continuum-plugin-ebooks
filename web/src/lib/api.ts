@@ -631,6 +631,31 @@ export const deleteGoal = (year: number, kind: string) =>
 export const getYearStats = (year: number) =>
   api.get<YearStats>(`/api/v1/me/stats/year/${year}`);
 
+// -- Notification preferences --------------------------------------------
+
+export type NotificationPref = {
+  user_id: string;
+  category: string;
+  delivery: "inapp" | "email" | "push" | string;
+  enabled: boolean;
+  updated_at?: string;
+};
+
+export const getNotificationCatalog = () =>
+  api.get<{ categories: string[]; deliveries: string[] }>(
+    `/api/v1/me/notification-prefs/catalog`,
+  );
+
+export const listNotificationPrefs = () =>
+  api.get<{ items: NotificationPref[] }>(`/api/v1/me/notification-prefs`);
+
+export const putNotificationPref = (
+  category: string,
+  delivery: string,
+  enabled: boolean,
+) =>
+  api.put(`/api/v1/me/notification-prefs`, { category, delivery, enabled });
+
 // -- OPDS tokens -----------------------------------------------------------
 
 export type OPDSToken = {

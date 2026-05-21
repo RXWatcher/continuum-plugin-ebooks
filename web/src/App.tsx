@@ -16,6 +16,7 @@ const CollectionDetail = lazy(() => import("./pages/CollectionDetail"));
 const SmartCollections = lazy(() => import("./pages/SmartCollections"));
 const SmartCollectionDetail = lazy(() => import("./pages/SmartCollectionDetail"));
 const Stats = lazy(() => import("./pages/Stats"));
+const Settings = lazy(() => import("./pages/Settings"));
 const Apps = lazy(() => import("./pages/Apps"));
 const Admin = lazy(() => import("./pages/Admin"));
 const Search = lazy(() => import("./pages/Search"));
@@ -66,6 +67,7 @@ export default function App() {
               element={<SmartCollectionDetail />}
             />
             <Route path="/me/stats" element={<Stats />} />
+            <Route path="/me/settings" element={<Settings />} />
             <Route path="/me/requests" element={<MyRequests />} />
             <Route path="/me/requests/:id" element={<RequestDetail />} />
             <Route path="/me/submit" element={<Submit />} />
