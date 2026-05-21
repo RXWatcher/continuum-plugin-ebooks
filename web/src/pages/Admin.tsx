@@ -80,6 +80,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import ContentRestrictionsTab from "@/pages/admin/ContentRestrictions";
+import CustomMetadataProvidersTab from "@/pages/admin/CustomMetadataProviders";
 
 type BackendOption = InstalledBackend;
 type Row = Record<string, unknown>;
@@ -213,6 +215,8 @@ export default function Admin() {
           <TabsTrigger value="libraries">Libraries</TabsTrigger>
           <TabsTrigger value="requests">Requests</TabsTrigger>
           <TabsTrigger value="providers">Providers</TabsTrigger>
+          <TabsTrigger value="metadata">Metadata sources</TabsTrigger>
+          <TabsTrigger value="restrictions">Restrictions</TabsTrigger>
           <TabsTrigger value="cache">Cache</TabsTrigger>
           <TabsTrigger value="integrations">Reader integrations</TabsTrigger>
           <TabsTrigger value="delivery">Delivery</TabsTrigger>
@@ -249,6 +253,12 @@ export default function Admin() {
               setTab("requests");
             }}
           />
+        </TabsContent>
+        <TabsContent value="metadata">
+          <CustomMetadataProvidersTab />
+        </TabsContent>
+        <TabsContent value="restrictions">
+          <ContentRestrictionsTab />
         </TabsContent>
         <TabsContent value="cache">
           <CacheTab />

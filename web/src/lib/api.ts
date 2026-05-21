@@ -791,6 +791,71 @@ export const uploadCustomFont = async (file: File, name?: string) => {
 export const deleteCustomFont = (id: string) =>
   api.delete(`/api/v1/me/fonts/${encodeURIComponent(id)}`);
 
+// -- Admin: content restrictions ---------------------------------------
+
+export type ContentRestriction = {
+  user_id: string;
+  library_ids?: number[];
+  blocked_genres?: string[];
+  blocked_tags?: string[];
+  blocked_authors?: string[];
+  block_explicit?: boolean;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export const listContentRestrictions = () =>
+  api.get<{ items: ContentRestriction[] }>(`/api/v1/admin/content-restrictions`);
+
+export const putContentRestriction = (
+  userId: string,
+  body: Partial<ContentRestriction>,
+) =>
+  api.put<ContentRestriction>(
+    `/api/v1/admin/content-restrictions/${encodeURIComponent(userId)}`,
+    body,
+  );
+
+export const deleteContentRestriction = (userId: string) =>
+  api.delete(`/api/v1/admin/content-restrictions/${encodeURIComponent(userId)}`);
+
+// -- Admin: custom metadata providers ----------------------------------
+
+export type CustomMetadataProvider = {
+  id: string;
+  name: string;
+  url: string;
+  auth_header?: string;
+  enabled: boolean;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export const listCustomMetadataProviders = () =>
+  api.get<{ items: CustomMetadataProvider[] }>(
+    `/api/v1/admin/custom-metadata-providers`,
+  );
+
+export const createCustomMetadataProvider = (
+  body: Partial<CustomMetadataProvider>,
+) =>
+  api.post<CustomMetadataProvider>(
+    `/api/v1/admin/custom-metadata-providers`,
+    body,
+  );
+
+export const updateCustomMetadataProvider = (
+  id: string,
+  body: Partial<CustomMetadataProvider>,
+) =>
+  api.patch<CustomMetadataProvider>(
+    `/api/v1/admin/custom-metadata-providers/${encodeURIComponent(id)}`,
+    body,
+  );
+
+export const deleteCustomMetadataProvider = (id: string) =>
+  api.delete(`/api/v1/admin/custom-metadata-providers/${encodeURIComponent(id)}`);
+
 // -- Per-book activity timeline -----------------------------------------
 
 export type ActivityEvent = {
