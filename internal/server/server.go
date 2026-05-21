@@ -7,6 +7,7 @@ import (
 	"context"
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -14,6 +15,7 @@ import (
 	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/auth"
 	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/backend"
 	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/event"
+	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/hlc"
 	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/koboref"
 	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/store"
 	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/streaming"
@@ -57,8 +59,10 @@ type TargetedEventPublisher interface {
 var _ EventPublisher = (*event.Publisher)(nil)
 
 type Server struct {
-	deps        Deps
-	publicLimit *ipLimiter
+	deps          Deps
+	publicLimit   *ipLimiter
+	syncClockOnce sync.Once
+	clockCached   *hlc.Clock
 }
 
 func New(d Deps) *Server {
@@ -91,6 +95,7 @@ func (s *Server) Handler() http.Handler {
 		s.mountReadwiseRoutes(r)
 		s.mountHardcoverRoutes(r)
 		s.mountEreaderRoutes(r)
+		s.mountSyncRoutes(r)
 		r.Group(func(r chi.Router) {
 			r.Use(auth.RequireAdmin)
 			s.mountAdminRoutes(r)
