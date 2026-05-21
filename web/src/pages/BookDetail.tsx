@@ -20,6 +20,7 @@ import {
 import BookActivity from "@/components/BookActivity";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { hasHTML, renderDescriptionHTML } from "@/lib/description";
 import {
   BookOpen,
   BookmarkPlus,
@@ -153,9 +154,21 @@ export default function BookDetail() {
           )}
         </header>
         {b.description && (
-          <p className="text-sm leading-relaxed text-muted-foreground">
-            {b.description}
-          </p>
+          hasHTML(b.description) ? (
+            <div
+              className="prose prose-sm prose-invert max-w-none text-sm leading-relaxed text-muted-foreground"
+              // DOMPurify sanitises in renderDescriptionHTML — narrow
+              // allowlist (b/strong/i/em/u/br/p/ul/ol/li/a/blockquote),
+              // href-only on <a>, http(s)/mailto schemes only.
+              dangerouslySetInnerHTML={{
+                __html: renderDescriptionHTML(b.description),
+              }}
+            />
+          ) : (
+            <p className="whitespace-pre-line text-sm leading-relaxed text-muted-foreground">
+              {b.description}
+            </p>
+          )
         )}
         <div className="flex flex-wrap items-center gap-2">
           <Button asChild>

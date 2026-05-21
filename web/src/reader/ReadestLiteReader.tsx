@@ -758,11 +758,33 @@ export const ReadestLiteReader = forwardRef<ReadestLiteReaderHandle, Props>(
       settings?.zoom,
     ]);
 
+    // The outer container's background needs to track the reader
+    // theme — when the foliate page content has a max-width, the
+    // empty side gutters show this background. If it didn't match
+    // the inner theme, dark mode shows white "bars" on the sides.
+    const outerBg =
+      settings?.theme === "dark"
+        ? "#111111"
+        : settings?.theme === "sepia"
+          ? "#f4ecd8"
+          : "#ffffff";
+    const outerFg =
+      settings?.theme === "dark"
+        ? "#f5f5f5"
+        : settings?.theme === "sepia"
+          ? "#1f1b16"
+          : "#171717";
     return (
-      <div className="relative h-full w-full overflow-hidden bg-background">
+      <div
+        className="relative h-full w-full overflow-hidden"
+        style={{ backgroundColor: outerBg, color: outerFg }}
+      >
         <div ref={containerRef} className="h-full w-full" />
         {loading && !error ? (
-          <div className="absolute inset-0 flex items-center justify-center bg-background text-sm text-muted-foreground">
+          <div
+            className="absolute inset-0 flex items-center justify-center text-sm"
+            style={{ backgroundColor: outerBg, color: outerFg }}
+          >
             Loading reader...
           </div>
         ) : null}
