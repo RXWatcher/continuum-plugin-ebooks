@@ -656,6 +656,77 @@ export const putNotificationPref = (
 ) =>
   api.put(`/api/v1/me/notification-prefs`, { category, delivery, enabled });
 
+// -- E-reader devices ----------------------------------------------------
+
+export type EreaderDevice = {
+  id: string;
+  user_id: string;
+  name: string;
+  email: string;
+  vendor?: string;
+  preferred_format?: string;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export const listEreaderDevices = () =>
+  api.get<{ items: EreaderDevice[] }>(`/api/v1/me/ereader-devices`);
+
+export const createEreaderDevice = (body: {
+  name: string;
+  email: string;
+  vendor?: string;
+  preferred_format?: string;
+}) => api.post<EreaderDevice>(`/api/v1/me/ereader-devices`, body);
+
+export const updateEreaderDevice = (
+  id: string,
+  body: Partial<EreaderDevice>,
+) =>
+  api.patch<EreaderDevice>(
+    `/api/v1/me/ereader-devices/${encodeURIComponent(id)}`,
+    body,
+  );
+
+export const deleteEreaderDevice = (id: string) =>
+  api.delete(`/api/v1/me/ereader-devices/${encodeURIComponent(id)}`);
+
+// -- Readwise integration ------------------------------------------------
+
+// GetReadwise* returns the MASKED token; the real one never leaves the
+// server. Put accepts the raw token from the user.
+export const getReadwiseToken = () =>
+  api.get<{ token: string | null }>(`/api/v1/me/readwise/token`);
+
+export const putReadwiseToken = (token: string) =>
+  api.put(`/api/v1/me/readwise/token`, { token });
+
+export const deleteReadwiseToken = () =>
+  api.delete(`/api/v1/me/readwise/token`);
+
+export const checkReadwiseAuth = () =>
+  api.post<{ ok: boolean; username?: string; error?: string }>(
+    `/api/v1/me/readwise/auth-check`,
+    {},
+  );
+
+// -- Hardcover integration ----------------------------------------------
+
+export const getHardcoverToken = () =>
+  api.get<{ token: string | null }>(`/api/v1/me/hardcover/token`);
+
+export const putHardcoverToken = (token: string) =>
+  api.put(`/api/v1/me/hardcover/token`, { token });
+
+export const deleteHardcoverToken = () =>
+  api.delete(`/api/v1/me/hardcover/token`);
+
+export const checkHardcoverAuth = () =>
+  api.post<{ ok: boolean; username?: string; error?: string }>(
+    `/api/v1/me/hardcover/auth-check`,
+    {},
+  );
+
 // -- OPDS tokens -----------------------------------------------------------
 
 export type OPDSToken = {
