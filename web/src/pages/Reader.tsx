@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useScreenWakeLock } from "@/hooks/useScreenWakeLock";
 import { useEinkMode } from "@/hooks/useEinkMode";
-import { downloadMarkdown } from "@/lib/annotationExport";
 import { Link, useParams } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -905,14 +904,6 @@ export default function Reader() {
     link.download = `${detail.data?.title || "reader-annotations"}.json`;
     link.click();
     URL.revokeObjectURL(url);
-  };
-
-  // exportAnnotationsMarkdown writes a Markdown file with one
-  // section per highlight + per-note grouping. Mirrors the JSON
-  // exporter above; downloadMarkdown handles the Blob plumbing.
-  const exportAnnotationsMarkdown = () => {
-    if (!detail.data) return;
-    downloadMarkdown(detail.data, annotations.data?.items ?? []);
   };
 
   const importAnnotationsJson = async (file: File | undefined) => {
@@ -2098,21 +2089,13 @@ export default function Reader() {
                   <div className="mb-2 text-xs font-medium text-muted-foreground">
                     Annotation backup
                   </div>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-2 gap-2">
                     <Button
                       size="sm"
                       variant="secondary"
                       onClick={exportAnnotationsJson}
                     >
                       Export JSON
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      onClick={exportAnnotationsMarkdown}
-                      title="Export annotations as Markdown — one section per highlight, sorted by position"
-                    >
-                      Export MD
                     </Button>
                     <label className="inline-flex h-9 cursor-pointer items-center justify-center rounded-md border border-border px-2 text-xs hover:bg-accent">
                       Import JSON
