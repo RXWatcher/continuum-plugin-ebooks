@@ -90,6 +90,7 @@ func (s *Server) Handler() http.Handler {
 		s.mountContentRestrictionRoutes(r)
 		s.mountReadwiseRoutes(r)
 		s.mountHardcoverRoutes(r)
+		s.mountEreaderRoutes(r)
 		r.Group(func(r chi.Router) {
 			r.Use(auth.RequireAdmin)
 			s.mountAdminRoutes(r)
