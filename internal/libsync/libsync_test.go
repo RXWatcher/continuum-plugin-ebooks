@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/backend"
-	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/store"
+	"github.com/RXWatcher/continuum-plugin-ebooks/internal/backend"
+	"github.com/RXWatcher/continuum-plugin-ebooks/internal/store"
 )
 
 func i64(v int64) *int64 { return &v }

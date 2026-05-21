@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"net/url"
 
-	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/mediatoken"
+	"github.com/RXWatcher/continuum-plugin-ebooks/internal/mediatoken"
 )
 
 // Capabilities mirrors the backend /capabilities response shape.

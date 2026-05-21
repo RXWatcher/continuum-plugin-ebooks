@@ -6,7 +6,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/dictionary"
+	"github.com/RXWatcher/continuum-plugin-ebooks/internal/dictionary"
 )
 
 // Dictionary lookup proxy. The reader's selection menu posts here

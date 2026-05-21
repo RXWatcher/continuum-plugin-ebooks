@@ -16,13 +16,13 @@ import (
 
 	"github.com/hashicorp/go-hclog"
 
-	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/backend"
-	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/event"
-	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/kindle"
-	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/koboref"
-	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/libsync"
-	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/store"
-	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/streaming"
+	"github.com/RXWatcher/continuum-plugin-ebooks/internal/backend"
+	"github.com/RXWatcher/continuum-plugin-ebooks/internal/event"
+	"github.com/RXWatcher/continuum-plugin-ebooks/internal/kindle"
+	"github.com/RXWatcher/continuum-plugin-ebooks/internal/koboref"
+	"github.com/RXWatcher/continuum-plugin-ebooks/internal/libsync"
+	"github.com/RXWatcher/continuum-plugin-ebooks/internal/store"
+	"github.com/RXWatcher/continuum-plugin-ebooks/internal/streaming"
 )
 
 func decodeBookRef(ref string) (int64, string, bool) {

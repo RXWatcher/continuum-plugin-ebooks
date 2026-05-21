@@ -6,7 +6,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/translate"
+	"github.com/RXWatcher/continuum-plugin-ebooks/internal/translate"
 )
 
 // In-text translation proxy. POST a {text, source?, target} body

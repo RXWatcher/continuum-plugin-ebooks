@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/backend"
+	"github.com/RXWatcher/continuum-plugin-ebooks/internal/backend"
 )
 
 // fakeHost stands up an httptest.Server that mimics the continuum host's

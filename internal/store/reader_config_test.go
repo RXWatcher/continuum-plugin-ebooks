@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/store"
+	"github.com/RXWatcher/continuum-plugin-ebooks/internal/store"
 )
 
 func TestReaderConfigRoundTrip(t *testing.T) {

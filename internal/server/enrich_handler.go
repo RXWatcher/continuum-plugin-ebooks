@@ -8,8 +8,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/auth"
-	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/enrich"
+	"github.com/RXWatcher/continuum-plugin-ebooks/internal/auth"
+	"github.com/RXWatcher/continuum-plugin-ebooks/internal/enrich"
 )
 
 // Metadata enrichment surface — calls into OpenLibrary + Google

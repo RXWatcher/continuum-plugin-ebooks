@@ -10,10 +10,10 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/oklog/ulid/v2"
 
-	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/auth"
-	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/backend"
-	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/smartcoll"
-	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/store"
+	"github.com/RXWatcher/continuum-plugin-ebooks/internal/auth"
+	"github.com/RXWatcher/continuum-plugin-ebooks/internal/backend"
+	"github.com/RXWatcher/continuum-plugin-ebooks/internal/smartcoll"
+	"github.com/RXWatcher/continuum-plugin-ebooks/internal/store"
 )
 
 // Smart Collection HTTP surface for the ebooks plugin. Ports the

@@ -22,9 +22,9 @@ import (
 	"github.com/oklog/ulid/v2"
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/auth"
-	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/backend"
-	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/store"
+	"github.com/RXWatcher/continuum-plugin-ebooks/internal/auth"
+	"github.com/RXWatcher/continuum-plugin-ebooks/internal/backend"
+	"github.com/RXWatcher/continuum-plugin-ebooks/internal/store"
 )
 
 // -- OPDS feeds (public route; basic-auth handled here) ------------------

@@ -11,12 +11,12 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
-	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/auth"
-	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/backend"
-	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/event"
-	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/koboref"
-	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/store"
-	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/streaming"
+	"github.com/RXWatcher/continuum-plugin-ebooks/internal/auth"
+	"github.com/RXWatcher/continuum-plugin-ebooks/internal/backend"
+	"github.com/RXWatcher/continuum-plugin-ebooks/internal/event"
+	"github.com/RXWatcher/continuum-plugin-ebooks/internal/koboref"
+	"github.com/RXWatcher/continuum-plugin-ebooks/internal/store"
+	"github.com/RXWatcher/continuum-plugin-ebooks/internal/streaming"
 )
 
 var pwaContentTypes = map[string]string{

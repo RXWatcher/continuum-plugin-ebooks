@@ -15,8 +15,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/migrate"
-	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/store"
+	"github.com/RXWatcher/continuum-plugin-ebooks/internal/migrate"
+	"github.com/RXWatcher/continuum-plugin-ebooks/internal/store"
 )
 
 var (

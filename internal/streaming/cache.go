@@ -13,7 +13,7 @@ import (
 
 	"github.com/oklog/ulid/v2"
 
-	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/store"
+	"github.com/RXWatcher/continuum-plugin-ebooks/internal/store"
 )
 
 // Manager implements cache-mode streaming. It owns:

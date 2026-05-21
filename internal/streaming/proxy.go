@@ -4,7 +4,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/backend"
+	"github.com/RXWatcher/continuum-plugin-ebooks/internal/backend"
 )
 
 // ProxyStream forwards a Range-aware stream from the backend to the client.

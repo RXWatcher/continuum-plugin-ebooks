@@ -12,8 +12,8 @@ import (
 
 	pluginv1 "github.com/ContinuumApp/continuum-plugin-sdk/pkg/pluginproto/continuum/plugin/v1"
 
-	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/migrate"
-	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/store"
+	"github.com/RXWatcher/continuum-plugin-ebooks/internal/migrate"
+	"github.com/RXWatcher/continuum-plugin-ebooks/internal/store"
 )
 
 func newConsumerStore(t *testing.T) *store.Store {

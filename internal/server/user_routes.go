@@ -16,11 +16,11 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/oklog/ulid/v2"
 
-	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/auth"
-	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/backend"
-	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/mediatoken"
-	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/store"
-	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/streaming"
+	"github.com/RXWatcher/continuum-plugin-ebooks/internal/auth"
+	"github.com/RXWatcher/continuum-plugin-ebooks/internal/backend"
+	"github.com/RXWatcher/continuum-plugin-ebooks/internal/mediatoken"
+	"github.com/RXWatcher/continuum-plugin-ebooks/internal/store"
+	"github.com/RXWatcher/continuum-plugin-ebooks/internal/streaming"
 )
 
 func (s *Server) mountUserRoutes(r chi.Router) {

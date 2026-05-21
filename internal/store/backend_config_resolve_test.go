@@ -3,7 +3,7 @@ package store_test
 import (
 	"testing"
 
-	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/store"
+	"github.com/RXWatcher/continuum-plugin-ebooks/internal/store"
 )
 
 // TestConfigBackendTarget pins the single resolver every backend-targeting

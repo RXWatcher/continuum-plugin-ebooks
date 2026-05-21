@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/backend"
+	"github.com/RXWatcher/continuum-plugin-ebooks/internal/backend"
 )
 
 // TestNormalize_AppliesAliasesAndDefaults pins the canonicalisation:

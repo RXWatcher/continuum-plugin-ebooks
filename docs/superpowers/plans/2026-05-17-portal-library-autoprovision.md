@@ -57,8 +57,8 @@ package libsync
 import (
 	"testing"
 
-	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/backend"
-	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/store"
+	"github.com/RXWatcher/continuum-plugin-ebooks/internal/backend"
+	"github.com/RXWatcher/continuum-plugin-ebooks/internal/store"
 )
 
 func i64(v int64) *int64 { return &v }
@@ -175,8 +175,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/backend"
-	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/store"
+	"github.com/RXWatcher/continuum-plugin-ebooks/internal/backend"
+	"github.com/RXWatcher/continuum-plugin-ebooks/internal/store"
 )
 
 // SyncStats summarizes a reconcile pass.
@@ -300,7 +300,7 @@ func Sync(ctx context.Context, st LibStore, lister BackendLister, backendID stri
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `go test ./internal/libsync/`
-Expected: `ok  github.com/ContinuumApp/continuum-plugin-ebooks/internal/libsync`
+Expected: `ok  github.com/RXWatcher/continuum-plugin-ebooks/internal/libsync`
 
 - [ ] **Step 5: Commit**
 
@@ -489,7 +489,7 @@ func (s *Server) handleAdminSyncLibraries(w http.ResponseWriter, r *http.Request
 Add the import to `internal/server/admin_routes.go`'s import block (it already imports `backend`; add `libsync`):
 
 ```go
-	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/libsync"
+	"github.com/RXWatcher/continuum-plugin-ebooks/internal/libsync"
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
@@ -549,7 +549,7 @@ func (t *Tasks) PortalLibrarySync(ctx context.Context) error {
 Ensure `internal/scheduler/tasks.go` imports `libsync` (it already imports `backend`, `fmt`, `store`):
 
 ```go
-	"github.com/ContinuumApp/continuum-plugin-ebooks/internal/libsync"
+	"github.com/RXWatcher/continuum-plugin-ebooks/internal/libsync"
 ```
 
 - [ ] **Step 2: Register the task key in main.go**
