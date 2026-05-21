@@ -24,8 +24,8 @@ importers:
         specifier: ^0.8.2
         version: 0.8.3
       foliate-js:
-        specifier: file:../../../readest/packages/foliate-js
-        version: file:../../../readest/packages/foliate-js
+        specifier: file:./vendor/foliate-js
+        version: file:vendor/foliate-js
       lucide-react:
         specifier: ^1.16.0
         version: 1.16.0(react@19.2.6)
@@ -1369,8 +1369,8 @@ packages:
   fflate@0.8.3:
     resolution: {integrity: sha512-tbZNuJrLwGUp3zshBtdy4W+ORxZuIh8a5ilyIEQDC5rY1f3U20JMry0Ll3WBzU58EZKsEuJFXhb5gwv8CsPvgA==}
 
-  foliate-js@file:../../../readest/packages/foliate-js:
-    resolution: {directory: ../../../readest/packages/foliate-js, type: directory}
+  foliate-js@file:vendor/foliate-js:
+    resolution: {directory: vendor/foliate-js, type: directory}
 
   fraction.js@5.3.4:
     resolution: {integrity: sha512-1X1NTtiJphryn/uLQz3whtY6jK3fTqoE3ohKs0tT+Ujr1W59oopxmoEh7Lu5p6vBaPbgoM0bzveAW4Qi5RyWDQ==}
@@ -3093,7 +3093,7 @@ snapshots:
 
   fflate@0.8.3: {}
 
-  foliate-js@file:../../../readest/packages/foliate-js:
+  foliate-js@file:vendor/foliate-js:
     dependencies:
       construct-style-sheets-polyfill: 3.1.0
 
