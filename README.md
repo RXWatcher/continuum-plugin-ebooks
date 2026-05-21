@@ -92,7 +92,15 @@ The `request_reconciler` scheduled task polls the same backends to recover state
 
 ## Detailed docs
 
-- [Setup, debugging, and communication flows](docs/setup-debug-flows.md)
+See [`docs/`](docs/) for operator, debugging, and integration docs:
+
+- [Architecture](docs/architecture.md) — components, request flow, state ownership.
+- [Operations](docs/operations.md) — install, Postgres bootstrap, backend selection, day-2.
+- [Scheduled tasks](docs/scheduled-tasks.md) — what each task does and how it fails.
+- [Cache and streaming](docs/cache-and-streaming.md) — proxy vs cache, LRU eviction, kepubify temp files.
+- [Reader integrations](docs/reader-integrations.md) — OPDS / KOReader / Kobo / Kindle deep dives.
+- [Debugging](docs/debugging.md) — symptom → root cause runbook.
+- [User guide](docs/user-guide.md) — customer-facing how-to.
 
 ## Build and release
 
