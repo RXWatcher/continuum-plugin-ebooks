@@ -9,15 +9,22 @@ import {
   Bookmark,
   Send,
   Smartphone,
-  Shield,
+  Search,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { currentUser } from "@/lib/identity";
 import SearchBar from "./SearchBar";
+import { CommandPaletteProvider, useCommandPalette } from "./CommandPalette";
 
 export default function Layout() {
+  return (
+    <CommandPaletteProvider>
+      <LayoutInner />
+    </CommandPaletteProvider>
+  );
+}
+
+function LayoutInner() {
   const loc = useLocation();
-  const user = currentUser();
   const isAdminRoute = loc.pathname.startsWith("/admin");
   const continuumHomeHref = isAdminRoute ? "/admin/plugins" : "/";
   const continuumHomeTitle = isAdminRoute
@@ -46,6 +53,7 @@ export default function Layout() {
             Ebooks
           </Link>
           <nav className="flex items-center gap-1 flex-wrap">
+            <CmdKButton />
             <NavTab to="/" end icon={<Compass className="size-4" />}>
               Home
             </NavTab>
@@ -70,11 +78,13 @@ export default function Layout() {
             <NavTab to="/apps" icon={<Smartphone className="size-4" />}>
               Apps
             </NavTab>
-            {user?.is_admin && (
-              <NavTab to="/admin" icon={<Shield className="size-4" />}>
-                Admin
-              </NavTab>
-            )}
+            {/*
+              No "Admin" tab here. The user portal is strictly user-facing;
+              admins reach the plugin's admin UI via the continuum host
+              sidebar (Apps → Books → Ebooks → [admin]). Mixing the two
+              surfaces in this nav blurred the audience and is what users
+              flagged as "user side has admin functions."
+            */}
           </nav>
           <div className="ml-auto w-full max-w-md sm:w-80 md:w-96">
             <SearchBar />
@@ -87,6 +97,23 @@ export default function Layout() {
         </div>
       </main>
     </div>
+  );
+}
+
+function CmdKButton() {
+  const { open } = useCommandPalette();
+  return (
+    <button
+      type="button"
+      onClick={open}
+      title="Search (Cmd-K)"
+      className="text-muted-foreground hover:bg-surface-hover hover:text-foreground inline-flex min-h-9 items-center justify-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors"
+    >
+      <Search className="size-4" />
+      <kbd className="border-border hidden rounded border px-1.5 py-0.5 text-xs sm:inline">
+        ⌘K
+      </kbd>
+    </button>
   );
 }
 
