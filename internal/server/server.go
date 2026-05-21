@@ -104,6 +104,7 @@ func (s *Server) Handler() http.Handler {
 		s.mountTranslateRoutes(r)
 		s.mountReadingGoalRoutes(r)
 		s.mountShareLinkRoutes(r)
+		s.mountExportRoutes(r)
 		r.Group(func(r chi.Router) {
 			r.Use(auth.RequireAdmin)
 			s.mountAdminRoutes(r)
