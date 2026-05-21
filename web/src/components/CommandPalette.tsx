@@ -20,6 +20,7 @@ import {
   Send,
   Settings,
   Smartphone,
+  Sparkles,
   Tag,
   Users,
 } from "lucide-react";
@@ -119,6 +120,7 @@ function Palette({ close }: { close: () => void }) {
       { id: "nav-series", label: "Series", icon: <BookOpen className="size-4" />, perform: () => navigate("/series") },
       { id: "nav-genres", label: "Genres", icon: <Tag className="size-4" />, perform: () => navigate("/genres") },
       { id: "nav-collections", label: "Collections", icon: <Bookmark className="size-4" />, perform: () => navigate("/collections") },
+      { id: "nav-smart-collections", label: "Smart collections", icon: <Sparkles className="size-4" />, perform: () => navigate("/smart-collections") },
       { id: "nav-requests", label: "My Requests", icon: <Send className="size-4" />, perform: () => navigate("/me/requests") },
       { id: "nav-apps", label: "Apps", icon: <Smartphone className="size-4" />, perform: () => navigate("/apps") },
       { id: "nav-admin", label: "Admin", hint: "requires admin access", icon: <Settings className="size-4" />, perform: () => navigate("/admin") },

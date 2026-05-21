@@ -278,6 +278,43 @@ export type Collection = {
   cover_book_id?: string;
 };
 
+export type SmartCollectionRule = {
+  field: string;
+  op: string;
+  value: unknown;
+};
+
+export type SmartCollectionGroup = {
+  match: "all" | "any";
+  rules: SmartCollectionRule[];
+};
+
+export type SmartCollectionSort = {
+  field: string;
+  order: "asc" | "desc";
+};
+
+export type SmartCollectionQuery = {
+  library_ids?: number[];
+  match: "all" | "any";
+  groups: SmartCollectionGroup[];
+  sort: SmartCollectionSort;
+  limit?: number;
+};
+
+export type SmartCollection = {
+  id: string;
+  userId: string;
+  name: string;
+  description?: string;
+  color?: string;
+  isPublic: boolean;
+  isPinned: boolean;
+  queryDef: SmartCollectionQuery;
+  createdAt: number;
+  updatedAt: number;
+};
+
 export type Annotation = {
   id: string;
   user_id: string;
@@ -490,6 +527,47 @@ export const removeCollectionItem = (id: string, bookID: string) =>
   api.delete(
     `/api/v1/me/collections/${encodeURIComponent(id)}/items/${encodeURIComponent(bookID)}`,
   );
+
+// -- Smart Collections -----------------------------------------------------
+
+export const listSmartCollections = () =>
+  api.get<{ items: SmartCollection[] }>(`/api/v1/me/smart-collections`);
+
+export const getSmartCollection = (id: string) =>
+  api.get<SmartCollection>(`/api/v1/me/smart-collections/${encodeURIComponent(id)}`);
+
+export const getSmartCollectionItems = (id: string, page = 0, limit = 30) =>
+  api.get<{ items: EbookSummary[]; total: number }>(
+    `/api/v1/me/smart-collections/${encodeURIComponent(id)}/items?page=${page}&limit=${limit}`,
+  );
+
+export const createSmartCollection = (body: {
+  name: string;
+  description?: string;
+  color?: string;
+  is_public?: boolean;
+  is_pinned?: boolean;
+  query_def: SmartCollectionQuery;
+}) => api.post<SmartCollection>(`/api/v1/me/smart-collections`, body);
+
+export const updateSmartCollection = (
+  id: string,
+  body: {
+    name?: string;
+    description?: string;
+    color?: string;
+    is_public?: boolean;
+    is_pinned?: boolean;
+    query_def?: SmartCollectionQuery;
+  },
+) =>
+  api.patch<SmartCollection>(
+    `/api/v1/me/smart-collections/${encodeURIComponent(id)}`,
+    body,
+  );
+
+export const deleteSmartCollection = (id: string) =>
+  api.delete(`/api/v1/me/smart-collections/${encodeURIComponent(id)}`);
 
 // -- OPDS tokens -----------------------------------------------------------
 

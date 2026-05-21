@@ -13,6 +13,8 @@ const RequestDetail = lazy(() => import("./pages/RequestDetail"));
 const Submit = lazy(() => import("./pages/Submit"));
 const Collections = lazy(() => import("./pages/Collections"));
 const CollectionDetail = lazy(() => import("./pages/CollectionDetail"));
+const SmartCollections = lazy(() => import("./pages/SmartCollections"));
+const SmartCollectionDetail = lazy(() => import("./pages/SmartCollectionDetail"));
 const Apps = lazy(() => import("./pages/Apps"));
 const Admin = lazy(() => import("./pages/Admin"));
 const Search = lazy(() => import("./pages/Search"));
@@ -57,6 +59,11 @@ export default function App() {
             <Route path="/genres" element={<Genres />} />
             <Route path="/collections" element={<Collections />} />
             <Route path="/collections/:id" element={<CollectionDetail />} />
+            <Route path="/smart-collections" element={<SmartCollections />} />
+            <Route
+              path="/smart-collections/:id"
+              element={<SmartCollectionDetail />}
+            />
             <Route path="/me/requests" element={<MyRequests />} />
             <Route path="/me/requests/:id" element={<RequestDetail />} />
             <Route path="/me/submit" element={<Submit />} />

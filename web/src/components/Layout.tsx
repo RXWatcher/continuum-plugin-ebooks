@@ -10,6 +10,7 @@ import {
   Send,
   Smartphone,
   Search,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import SearchBar from "./SearchBar";
@@ -74,6 +75,9 @@ function LayoutInner() {
             </NavTab>
             <NavTab to="/collections" icon={<Bookmark className="size-4" />}>
               Collections
+            </NavTab>
+            <NavTab to="/smart-collections" icon={<Sparkles className="size-4" />}>
+              Smart
             </NavTab>
             <NavTab to="/me/requests" icon={<Send className="size-4" />}>
               Requests
