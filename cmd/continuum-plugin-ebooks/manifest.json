@@ -30,43 +30,50 @@
         "plugin.continuum.bookwarehouse-ebook.request_failed",
         "plugin.continuum.bookwarehouse-ebook.request_status_changed",
         "plugin.continuum.bookwarehouse-ebook.request_fulfilled"
-      ]
+      ],
+      "description": "Watches request lifecycle events from the configured ebook backends and updates the portal request table."
     },
     {
       "type": "scheduled_task.v1",
       "id": "request_reconciler",
       "display_name": "Reconcile ebook requests",
-      "cron": "*/1 * * * *"
+      "cron": "*/1 * * * *",
+      "description": "Polls backends for missed request events and reconciles stale request rows."
     },
     {
       "type": "scheduled_task.v1",
       "id": "cache_evictor",
       "display_name": "Evict LRU cached ebook files",
-      "cron": "*/5 * * * *"
+      "cron": "*/5 * * * *",
+      "description": "LRU-evicts cached ebook files to keep the on-disk download cache under its size budget."
     },
     {
       "type": "scheduled_task.v1",
       "id": "kobo_session_reaper",
       "display_name": "Expire stale Kobo transfer sessions",
-      "cron": "*/5 * * * *"
+      "cron": "*/5 * * * *",
+      "description": "Expires Kobo Sync transfer sessions that have gone stale."
     },
     {
       "type": "scheduled_task.v1",
       "id": "opds_token_pruner",
       "display_name": "Prune revoked OPDS tokens",
-      "cron": "0 3 * * *"
+      "cron": "0 3 * * *",
+      "description": "Deletes revoked OPDS authentication tokens."
     },
     {
       "type": "scheduled_task.v1",
       "id": "kindle_send_retrier",
       "display_name": "Retry queued Kindle sends",
-      "cron": "*/2 * * * *"
+      "cron": "*/2 * * * *",
+      "description": "Retries queued Kindle send-to-device deliveries that previously failed."
     },
     {
       "type": "scheduled_task.v1",
       "id": "portal_library_sync",
       "display_name": "Sync presentation libraries from backend",
-      "cron": "0 * * * *"
+      "cron": "0 * * * *",
+      "description": "Mirrors backend libraries into the portal presentation DB on a schedule."
     },
     {
       "type": "scheduled_task.v1",
@@ -78,7 +85,8 @@
     {
       "type": "request_router.v1",
       "id": "ebooks",
-      "display_name": "Route ebook requests"
+      "display_name": "Route ebook requests",
+      "description": "Forwards ebook requests to the configured request provider (bookwarehouse-ebook for owned-library; ebook-requests for downloader-style)."
     }
   ],
   "http_routes": [
