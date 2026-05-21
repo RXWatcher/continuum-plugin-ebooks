@@ -27,6 +27,7 @@ func (s *Server) mountUserRoutes(r chi.Router) {
 	// Identity-scoped reading data
 	r.Get("/me/library", s.handleLibrary)
 	r.Get("/me/progress", s.handleRecentProgress)
+	r.Get("/me/streak", s.handleGetStreak)
 	r.Get("/me/books/{id}", s.handleGetBookUserData)
 	r.Get("/me/books/{id}/reader-config", s.handleGetReaderConfig)
 	r.Put("/me/books/{id}/reader-config", s.handlePutReaderConfig)
@@ -300,6 +301,21 @@ func (s *Server) handleRecentProgress(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeItems(w, 200, rows)
+}
+
+// handleGetStreak — GET /me/streak
+// Returns {current, longest, last_active_date} computed from
+// user_data.last_read_at distinct dates. Mirrors the audiobooks
+// plugin's /me/streak shape so a shared SPA component can render
+// either side.
+func (s *Server) handleGetStreak(w http.ResponseWriter, r *http.Request) {
+	id, _ := auth.FromContext(r.Context())
+	streak, err := s.deps.Store.StreakForUser(r.Context(), id.UserID, time.UTC)
+	if err != nil {
+		writeInternal(w, r, err)
+		return
+	}
+	writeJSON(w, 200, streak)
 }
 
 func (s *Server) handleGetBookUserData(w http.ResponseWriter, r *http.Request) {
