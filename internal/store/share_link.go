@@ -12,14 +12,14 @@ import (
 // ShareLink is one row in share_link. Slug is the public capability;
 // expires_at + max_uses gate access at read time.
 type ShareLink struct {
-	ID        string
-	UserID    string
-	Slug      string
-	ItemID    string
-	ExpiresAt *time.Time
-	MaxUses   int
-	UseCount  int
-	CreatedAt time.Time
+	ID        string     `json:"id"`
+	UserID    string     `json:"user_id"`
+	Slug      string     `json:"slug"`
+	ItemID    string     `json:"item_id"`
+	ExpiresAt *time.Time `json:"expires_at"`
+	MaxUses   int        `json:"max_uses"`
+	UseCount  int        `json:"use_count"`
+	CreatedAt time.Time  `json:"created_at"`
 }
 
 func (s *Store) CreateShareLink(ctx context.Context, l ShareLink) error {

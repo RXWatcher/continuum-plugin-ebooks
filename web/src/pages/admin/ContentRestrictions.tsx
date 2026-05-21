@@ -33,6 +33,7 @@ export default function ContentRestrictionsTab() {
       toast.success("Restriction removed");
       qc.invalidateQueries({ queryKey: ["admin-content-restrictions"] });
     },
+    onError: (err) => toast.error(`Remove failed: ${err}`),
   });
 
   return (
@@ -103,7 +104,7 @@ export default function ContentRestrictionsTab() {
                 blocked_genres: [],
                 blocked_tags: [],
                 blocked_authors: [],
-                block_explicit: false,
+                explicit_blocked: false,
               });
               setUserIdDraft("");
             }}
@@ -134,8 +135,9 @@ function summarise(r: ContentRestriction): string {
   if (r.blocked_tags?.length) parts.push(`${r.blocked_tags.length} tags`);
   if (r.blocked_authors?.length)
     parts.push(`${r.blocked_authors.length} authors`);
-  if (r.block_explicit) parts.push("explicit blocked");
-  if (r.library_ids?.length) parts.push(`${r.library_ids.length} libraries`);
+  if (r.explicit_blocked) parts.push("explicit blocked");
+  if (r.blocked_libraries?.length)
+    parts.push(`${r.blocked_libraries.length} libraries`);
   return parts.join(" · ") || "no rules set";
 }
 
@@ -157,8 +159,8 @@ function RestrictionEditor({
   const [blockedAuthors, setBlockedAuthors] = useState(
     (restriction.blocked_authors ?? []).join(", "),
   );
-  const [blockExplicit, setBlockExplicit] = useState(
-    !!restriction.block_explicit,
+  const [explicitBlocked, setExplicitBlocked] = useState(
+    !!restriction.explicit_blocked,
   );
 
   const save = useMutation({
@@ -167,7 +169,7 @@ function RestrictionEditor({
         blocked_genres: splitCSV(blockedGenres),
         blocked_tags: splitCSV(blockedTags),
         blocked_authors: splitCSV(blockedAuthors),
-        block_explicit: blockExplicit,
+        explicit_blocked: explicitBlocked,
       }),
     onSuccess: () => {
       toast.success("Saved");
@@ -196,7 +198,10 @@ function RestrictionEditor({
       />
       <div className="flex items-center justify-between">
         <Label>Block explicit content</Label>
-        <Switch checked={blockExplicit} onCheckedChange={setBlockExplicit} />
+        <Switch
+          checked={explicitBlocked}
+          onCheckedChange={setExplicitBlocked}
+        />
       </div>
       <div className="flex gap-2">
         <Button onClick={() => save.mutate()} disabled={save.isPending}>

@@ -293,8 +293,12 @@ export default function Reader() {
     tag.textContent = items
       .map(
         (f) =>
+          // f.url is relative to the plugin's API root (/me/fonts/...).
+          // mountPath() returns /api/v1/plugins/{installId}, so we add
+          // /api/v1 between them to reach the actual data endpoint via
+          // the host proxy.
           `@font-face { font-family: ${JSON.stringify(f.name)}; src: url(${JSON.stringify(
-            f.url,
+            `${mountPath()}/api/v1${f.url}`,
           )}); font-display: swap; }`,
       )
       .join("\n");

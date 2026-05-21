@@ -24,10 +24,20 @@ export default function DefinePopover({
 }) {
   const def = useQuery({
     queryKey: ["define", word],
-    queryFn: () =>
-      api.fetchRaw(`/dictionary/lookup?word=${encodeURIComponent(word)}`).then(
-        (res) => res.json() as Promise<LookupResult>,
-      ),
+    queryFn: async () => {
+      const res = await api.fetchRaw(
+        `/dictionary/lookup?word=${encodeURIComponent(word)}`,
+      );
+      if (!res.ok) {
+        // authedFetch doesn't throw on 4xx; the dictionary route
+        // returns text/plain bodies on error. Surface the body so
+        // the popover shows a real message instead of a JSON parse
+        // error.
+        const text = await res.text().catch(() => res.statusText);
+        throw new Error(text || `lookup failed (${res.status})`);
+      }
+      return (await res.json()) as LookupResult;
+    },
     enabled: !!word,
   });
 
@@ -46,6 +56,10 @@ export default function DefinePopover({
     <PopoverShell title={word} onClose={onClose}>
       {def.isLoading ? (
         <Skeleton className="h-24 w-full" />
+      ) : def.isError ? (
+        <p className="text-destructive text-sm">
+          {def.error instanceof Error ? def.error.message : "Lookup failed"}
+        </p>
       ) : entries.length === 0 ? (
         <p className="text-muted-foreground text-sm">
           No definition found in Wiktionary.

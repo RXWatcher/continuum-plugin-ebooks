@@ -11,11 +11,11 @@ import (
 // Defaults to enabled when no row exists — the IsEnabled helper
 // implements that "opt-out" semantic.
 type NotificationPref struct {
-	UserID    string
-	Category  string
-	Delivery  string // "inapp" | "email" | "push"
-	Enabled   bool
-	UpdatedAt time.Time
+	UserID    string    `json:"user_id"`
+	Category  string    `json:"category"`
+	Delivery  string    `json:"delivery"` // "inapp" | "email" | "push"
+	Enabled   bool      `json:"enabled"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // SupportedCategories is the canonical list the SPA renders the

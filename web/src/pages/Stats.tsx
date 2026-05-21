@@ -223,7 +223,12 @@ function TopBooksCard({
   top,
   loading,
 }: {
-  top: { book_id: string; title?: string; authors?: string[]; progress?: number; last_read_at?: string }[];
+  top: {
+    book_id: string;
+    is_finished: boolean;
+    progress_pct: number;
+    last_read_at: string;
+  }[];
   loading: boolean;
 }) {
   return (
@@ -235,7 +240,9 @@ function TopBooksCard({
       {loading ? (
         <Skeleton className="h-32 w-full" />
       ) : top.length === 0 ? (
-        <p className="text-muted-foreground text-sm">No reading activity yet.</p>
+        <p className="text-muted-foreground text-sm">
+          No reading activity yet.
+        </p>
       ) : (
         <ol className="space-y-2">
           {top.slice(0, 10).map((b, i) => (
@@ -251,19 +258,15 @@ function TopBooksCard({
                   to={`/books/${encodeURIComponent(b.book_id)}`}
                   className="font-medium hover:underline"
                 >
-                  {b.title ?? b.book_id}
+                  {b.book_id}
                 </Link>
-                {b.authors?.length ? (
-                  <span className="text-muted-foreground ml-2">
-                    by {b.authors.join(", ")}
-                  </span>
+                {b.is_finished ? (
+                  <span className="text-muted-foreground ml-2">· finished</span>
                 ) : null}
               </span>
-              {typeof b.progress === "number" && (
-                <span className="text-muted-foreground tabular-nums text-xs">
-                  {Math.round((b.progress ?? 0) * 100)}%
-                </span>
-              )}
+              <span className="text-muted-foreground tabular-nums text-xs">
+                {Math.round(b.progress_pct * 100)}%
+              </span>
             </li>
           ))}
         </ol>

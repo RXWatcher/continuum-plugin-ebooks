@@ -15,14 +15,14 @@ import (
 // user pin which file type the send route should pick when a book
 // has multiple.
 type EreaderDevice struct {
-	ID              string
-	UserID          string
-	Name            string
-	Email           string
-	Vendor          string
-	PreferredFormat string
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
+	ID              string    `json:"id"`
+	UserID          string    `json:"user_id"`
+	Name            string    `json:"name"`
+	Email           string    `json:"email"`
+	Vendor          string    `json:"vendor"`
+	PreferredFormat string    `json:"preferred_format"`
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
 }
 
 func (s *Store) UpsertEreaderDevice(ctx context.Context, d EreaderDevice) error {

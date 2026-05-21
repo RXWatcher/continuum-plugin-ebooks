@@ -612,13 +612,13 @@ export type GoalProgress = {
 export type YearStats = {
   year: number;
   books_finished: number;
+  books_started: number;
   distinct_days: number;
   top_books: {
     book_id: string;
-    title?: string;
-    authors?: string[];
-    last_read_at?: string;
-    progress?: number;
+    is_finished: boolean;
+    progress_pct: number;
+    last_read_at: string;
   }[];
 };
 
@@ -795,11 +795,11 @@ export const deleteCustomFont = (id: string) =>
 
 export type ContentRestriction = {
   user_id: string;
-  library_ids?: number[];
+  blocked_libraries?: number[];
   blocked_genres?: string[];
   blocked_tags?: string[];
   blocked_authors?: string[];
-  block_explicit?: boolean;
+  explicit_blocked?: boolean;
   created_at?: string;
   updated_at?: string;
 };

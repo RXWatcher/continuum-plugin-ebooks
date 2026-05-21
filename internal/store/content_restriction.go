@@ -13,14 +13,14 @@ import (
 // ContentRestriction mirrors the audiobooks plugin shape minus the
 // narrators column. Same admin-writes, listener-reads model.
 type ContentRestriction struct {
-	UserID           string
-	BlockedGenres    []string
-	BlockedTags      []string
-	BlockedAuthors   []string
-	BlockedLibraries []int64
-	ExplicitBlocked  bool
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
+	UserID           string    `json:"user_id"`
+	BlockedGenres    []string  `json:"blocked_genres"`
+	BlockedTags      []string  `json:"blocked_tags"`
+	BlockedAuthors   []string  `json:"blocked_authors"`
+	BlockedLibraries []int64   `json:"blocked_libraries"`
+	ExplicitBlocked  bool      `json:"explicit_blocked"`
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
 }
 
 func (s *Store) GetContentRestriction(ctx context.Context, userID string) (ContentRestriction, error) {

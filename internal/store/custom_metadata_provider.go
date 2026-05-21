@@ -15,13 +15,13 @@ import (
 // the provider expects in the request's auth header (spec uses
 // "AUTHORIZATION").
 type CustomMetadataProvider struct {
-	ID         string
-	Name       string
-	URL        string
-	AuthHeader string
-	Enabled    bool
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
+	ID         string    `json:"id"`
+	Name       string    `json:"name"`
+	URL        string    `json:"url"`
+	AuthHeader string    `json:"auth_header"`
+	Enabled    bool      `json:"enabled"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
 }
 
 func (s *Store) UpsertCustomMetadataProvider(ctx context.Context, p CustomMetadataProvider) error {

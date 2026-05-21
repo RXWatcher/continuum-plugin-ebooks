@@ -29,6 +29,7 @@ import {
   listEreaderDevices,
   listNotificationPrefs,
   listShareLinks,
+  mountPath,
   putHardcoverToken,
   putNotificationPref,
   putReadwiseToken,
@@ -169,7 +170,10 @@ function ShareLinkRow({
   link: ShareLink;
   onDelete: () => void;
 }) {
-  const url = `${window.location.origin}/share/${link.slug}`;
+  // Share URL must include the plugin mount prefix; /share/{slug}
+  // is mounted at the plugin's chi root, which is served at
+  // /api/v1/plugins/{installId}/ via the host proxy.
+  const url = `${window.location.origin}${mountPath()}/share/${link.slug}`;
   const expiresInDays = link.expires_at
     ? Math.max(
         0,

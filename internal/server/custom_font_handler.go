@@ -64,7 +64,10 @@ func (s *Server) handleListCustomFonts(w http.ResponseWriter, r *http.Request) {
 			"mime":       f.MIME,
 			"size_bytes": f.SizeBytes,
 			"created_at": f.CreatedAt.UnixMilli(),
-			"url":        "/api/v1/me/fonts/" + f.ID + "/data",
+			// Relative to the plugin's API root (/api/v1). The SPA
+			// prepends apiBase() before injecting into @font-face so
+			// the URL routes through the host proxy correctly.
+			"url": "/me/fonts/" + f.ID + "/data",
 		})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"items": out})
@@ -139,7 +142,7 @@ func (s *Server) handleUploadCustomFont(w http.ResponseWriter, r *http.Request) 
 		"name":       font.Name,
 		"mime":       font.MIME,
 		"size_bytes": font.SizeBytes,
-		"url":        "/api/v1/me/fonts/" + font.ID + "/data",
+		"url":        "/me/fonts/" + font.ID + "/data",
 	})
 }
 
