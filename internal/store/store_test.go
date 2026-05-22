@@ -191,16 +191,6 @@ func TestStore_Smoke(t *testing.T) {
 		t.Errorf("total = %d", total)
 	}
 
-	// opds_token
-	if err := s.InsertOPDSToken(ctx, store.OPDSToken{
-		ID: "ot1", UserID: "u1", JTI: "jti-1", TokenHash: "hash", Label: "phone",
-	}); err != nil {
-		t.Fatalf("InsertOPDSToken: %v", err)
-	}
-	if _, err := s.GetOPDSTokenByJTI(ctx, "jti-1"); err != nil {
-		t.Errorf("GetOPDSTokenByJTI: %v", err)
-	}
-
 	// kosync
 	if err := s.UpsertKosyncUser(ctx, store.KosyncUser{
 		UserID: "u1", KosyncUsername: "alice", KosyncPasswordHash: "h",

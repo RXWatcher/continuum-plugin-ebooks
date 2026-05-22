@@ -1,9 +1,7 @@
 package server
 
 import (
-	cryptoRand "crypto/rand"
 	"crypto/sha1"
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"encoding/xml"
@@ -19,8 +17,9 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/oklog/ulid/v2"
 	"golang.org/x/crypto/bcrypt"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/RXWatcher/continuum-plugin-ebooks/internal/auth"
 	"github.com/RXWatcher/continuum-plugin-ebooks/internal/backend"
@@ -142,10 +141,16 @@ func buildOPDSCatalogFeed(env backend.PageEnvelope[backend.EbookSummary], realm 
 }
 
 func (s *Server) handleOPDSCatalog(w http.ResponseWriter, r *http.Request) {
-	if s.opdsAuth(r) == "" {
+	userID, _, autherr := s.opdsAuth(r)
+	if autherr != nil {
+		writeErr(w, http.StatusBadGateway, "auth service unavailable")
+		return
+	}
+	if userID == "" {
 		s.opdsChallenge(w, r)
 		return
 	}
+	_ = userID
 	cfg, _ := s.deps.Store.GetConfig(r.Context())
 	if !cfg.HasBackend() {
 		writeErr(w, 412, "no backend")
@@ -166,10 +171,16 @@ func (s *Server) handleOPDSCatalog(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleOPDSSearch(w http.ResponseWriter, r *http.Request) {
-	if s.opdsAuth(r) == "" {
+	userID, _, autherr := s.opdsAuth(r)
+	if autherr != nil {
+		writeErr(w, http.StatusBadGateway, "auth service unavailable")
+		return
+	}
+	if userID == "" {
 		s.opdsChallenge(w, r)
 		return
 	}
+	_ = userID
 	q := r.URL.Query().Get("q")
 	if q == "" {
 		// Return OpenSearch description.
@@ -219,10 +230,16 @@ func (s *Server) handleOPDSSearch(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleOPDSBookEntry(w http.ResponseWriter, r *http.Request) {
-	if s.opdsAuth(r) == "" {
+	userID, _, autherr := s.opdsAuth(r)
+	if autherr != nil {
+		writeErr(w, http.StatusBadGateway, "auth service unavailable")
+		return
+	}
+	if userID == "" {
 		s.opdsChallenge(w, r)
 		return
 	}
+	_ = userID
 	cfg, _ := s.deps.Store.GetConfig(r.Context())
 	if !cfg.HasBackend() {
 		writeErr(w, 412, "no backend")
@@ -252,7 +269,11 @@ func (s *Server) handleOPDSBookEntry(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleOPDSDownload(w http.ResponseWriter, r *http.Request) {
-	userID := s.opdsAuth(r)
+	userID, _, autherr := s.opdsAuth(r)
+	if autherr != nil {
+		writeErr(w, http.StatusBadGateway, "auth service unavailable")
+		return
+	}
 	if userID == "" {
 		s.opdsChallenge(w, r)
 		return
@@ -347,25 +368,26 @@ func formatMime(f string) string {
 	return "application/octet-stream"
 }
 
-// opdsAuth validates the OPDS Basic-Auth credentials and returns the
-// authenticated portal user id. Returns "" when the request is unauthorized.
-func (s *Server) opdsAuth(r *http.Request) string {
+// opdsAuth validates OPDS Basic-Auth and returns the resolved (userID,
+// profileID). Both are "" when the request is unauthorized. profileID is ""
+// for the primary profile. The error return distinguishes a bad credential
+// (nil error, empty ids) from an auth-service failure (non-nil error).
+func (s *Server) opdsAuth(r *http.Request) (string, string, error) {
 	user, pass, ok := r.BasicAuth()
 	if !ok || user == "" || pass == "" {
-		return ""
+		return "", "", nil
 	}
-	t, err := s.deps.Store.GetOPDSTokenByJTI(r.Context(), pass)
+	if s.deps.Credentials == nil {
+		return "", "", errors.New("credential validator not configured")
+	}
+	userID, profileID, err := s.deps.Credentials.ValidateProfileCredential(r.Context(), user, pass)
 	if err != nil {
-		return ""
+		if status.Code(err) == codes.Unauthenticated {
+			return "", "", nil // bad credential — not a service error
+		}
+		return "", "", err // transport / Unimplemented — service error
 	}
-	if t.UserID != user {
-		return ""
-	}
-	if err := bcrypt.CompareHashAndPassword([]byte(t.TokenHash), []byte(pass)); err != nil {
-		return ""
-	}
-	_ = s.deps.Store.TouchOPDSToken(r.Context(), pass)
-	return t.UserID
+	return userID, profileID, nil
 }
 
 func (s *Server) opdsChallenge(w http.ResponseWriter, r *http.Request) {
@@ -376,61 +398,6 @@ func (s *Server) opdsChallenge(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Basic realm=%q`, realm))
 	http.Error(w, "auth required", http.StatusUnauthorized)
-}
-
-// OPDS token user endpoints
-func (s *Server) handleListOPDSTokens(w http.ResponseWriter, r *http.Request) {
-	id, _ := auth.FromContext(r.Context())
-	ts, _ := s.deps.Store.ListOPDSTokensByUser(r.Context(), id.UserID)
-	out := make([]map[string]any, 0, len(ts))
-	for _, t := range ts {
-		out = append(out, map[string]any{
-			"id":           t.ID,
-			"label":        t.Label,
-			"last_used_at": t.LastUsedAt,
-			"created_at":   t.CreatedAt,
-			"revoked":      t.RevokedAt != nil,
-		})
-	}
-	writeJSON(w, 200, map[string]any{"items": out})
-}
-
-func (s *Server) handleCreateOPDSToken(w http.ResponseWriter, r *http.Request) {
-	id, _ := auth.FromContext(r.Context())
-	var body struct {
-		Label string `json:"label"`
-	}
-	_ = json.NewDecoder(r.Body).Decode(&body)
-	// Random JTI shown to user once; hash stored.
-	buf := make([]byte, 24)
-	if _, err := io.ReadFull(cryptoRand.Reader, buf); err != nil {
-		writeInternal(w, r, err)
-		return
-	}
-	jti := base64.URLEncoding.WithPadding(base64.NoPadding).EncodeToString(buf)
-	hash, err := bcrypt.GenerateFromPassword([]byte(jti), bcrypt.DefaultCost)
-	if err != nil {
-		writeInternal(w, r, err)
-		return
-	}
-	t := store.OPDSToken{
-		ID: ulid.Make().String(), UserID: id.UserID, JTI: jti, TokenHash: string(hash), Label: body.Label,
-	}
-	if err := s.deps.Store.InsertOPDSToken(r.Context(), t); err != nil {
-		writeInternal(w, r, err)
-		return
-	}
-	writeJSON(w, 201, map[string]any{"id": t.ID, "label": t.Label, "jti_shown_once": jti})
-}
-
-func (s *Server) handleRevokeOPDSToken(w http.ResponseWriter, r *http.Request) {
-	id, _ := auth.FromContext(r.Context())
-	tid := chi.URLParam(r, "id")
-	if err := s.deps.Store.RevokeOPDSToken(r.Context(), tid, id.UserID); err != nil {
-		writeErr(w, 404, err.Error())
-		return
-	}
-	w.WriteHeader(204)
 }
 
 // -- kosync routes --------------------------------------------------------

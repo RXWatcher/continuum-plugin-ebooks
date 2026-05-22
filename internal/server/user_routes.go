@@ -76,9 +76,6 @@ func (s *Server) mountUserRoutes(r chi.Router) {
 	// Kobo / Kindle / OPDS / Kosync user management
 	r.Post("/me/books/{id}/send-to-kindle", s.handleSendToKindle)
 	r.Post("/me/books/{id}/send-to-kobo", s.handleSendToKobo)
-	r.Get("/me/opds-tokens", s.handleListOPDSTokens)
-	r.Post("/me/opds-tokens", s.handleCreateOPDSToken)
-	r.Delete("/me/opds-tokens/{id}", s.handleRevokeOPDSToken)
 	r.Get("/me/kosync", s.handleKosyncStatus)
 	r.Post("/me/kosync/register", s.handleKosyncRegister)
 	r.Delete("/me/kosync", s.handleKosyncDelete)

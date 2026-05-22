@@ -30,8 +30,6 @@ func (s *Server) mountAdminRoutes(r chi.Router) {
 	r.Get("/admin/cache", s.handleAdminCacheStats)
 	r.Get("/admin/cache/largest", s.handleAdminCacheLargest)
 	r.Get("/admin/kobo-sessions", s.handleAdminKoboSessions)
-	r.Get("/admin/opds-tokens", s.handleAdminOPDSTokens)
-	r.Delete("/admin/opds-tokens/{id}", s.handleAdminRevokeOPDSToken)
 	r.Get("/admin/kosync-users", s.handleAdminKosyncUsers)
 	r.Delete("/admin/kosync-users/{username}", s.handleAdminDeleteKosync)
 	r.Get("/admin/kindle-log", s.handleAdminKindleLog)
@@ -349,20 +347,6 @@ func (s *Server) handleAdminCacheLargest(w http.ResponseWriter, r *http.Request)
 func (s *Server) handleAdminKoboSessions(w http.ResponseWriter, r *http.Request) {
 	rows, _ := s.deps.Store.ListAllKoboSessions(r.Context(), 100)
 	writeItems(w, 200, rows)
-}
-
-func (s *Server) handleAdminOPDSTokens(w http.ResponseWriter, r *http.Request) {
-	rows, _ := s.deps.Store.ListAllOPDSTokens(r.Context())
-	writeItems(w, 200, rows)
-}
-
-func (s *Server) handleAdminRevokeOPDSToken(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
-	if err := s.deps.Store.AdminRevokeOPDSToken(r.Context(), id); err != nil {
-		writeErr(w, 404, err.Error())
-		return
-	}
-	w.WriteHeader(204)
 }
 
 func (s *Server) handleAdminKosyncUsers(w http.ResponseWriter, r *http.Request) {

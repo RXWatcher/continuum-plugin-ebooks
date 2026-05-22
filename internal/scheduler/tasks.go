@@ -224,13 +224,6 @@ func (t *Tasks) KoboSessionReaper(ctx context.Context) error {
 // osDirEntry is an alias to keep the import surface minimal.
 type osDirEntry = fs.DirEntry
 
-// OPDSTokenPruner deletes OPDS tokens revoked > 30 days ago.
-func (t *Tasks) OPDSTokenPruner(ctx context.Context) error {
-	cutoff := time.Now().Add(-30 * 24 * time.Hour)
-	_, err := t.Store.DeleteOPDSTokensRevokedBefore(ctx, cutoff)
-	return err
-}
-
 // KindleSendRetrier retries Kindle sends that have been in 'queued' status > 30s.
 // Max 3 attempts per row (tracked by the error_text prefix). For each row it
 // fetches the EPUB via the streaming layer (cache hit or single-flight

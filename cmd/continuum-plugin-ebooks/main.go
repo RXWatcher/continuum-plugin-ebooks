@@ -91,7 +91,6 @@ func main() {
 			"request_reconciler":  t.RequestReconciler,
 			"cache_evictor":       t.CacheEvictor,
 			"kobo_session_reaper": t.KoboSessionReaper,
-			"opds_token_pruner":   t.OPDSTokenPruner,
 			"kindle_send_retrier": t.KindleSendRetrier,
 			"portal_library_sync": t.PortalLibrarySync,
 			"purge_expired":       t.PurgeExpired,
