@@ -34,6 +34,8 @@ func (s *Server) mountOPDS(r chi.Router) {
 	r.Get("/search", s.handleOPDSSearch)
 	r.Get("/book/{id}", s.handleOPDSBookEntry)
 	r.Get("/book/{id}/download/{format}", s.handleOPDSDownload)
+	r.Get("/collections", s.handleOPDSCollections)
+	r.Get("/collection/{id}", s.handleOPDSCollection)
 }
 
 type opdsFeed struct {
@@ -77,6 +79,7 @@ func (s *Server) handleOPDSRoot(w http.ResponseWriter, r *http.Request) {
 			{Rel: "start", Type: "application/atom+xml;profile=opds-catalog", Href: "/opds/"},
 			{Rel: "http://opds-spec.org/sort/new", Type: "application/atom+xml;profile=opds-catalog;kind=acquisition", Href: "/opds/catalog"},
 			{Rel: "search", Type: "application/opensearchdescription+xml", Href: "/opds/search"},
+		{Rel: "subsection", Type: "application/atom+xml;profile=opds-catalog", Href: "/opds/collections"},
 		},
 	}
 	writeOPDS(w, r, feed)
@@ -222,6 +225,111 @@ func (s *Server) handleOPDSSearch(w http.ResponseWriter, r *http.Request) {
 			entry.Links = append(entry.Links, opdsLink{
 				Rel: "http://opds-spec.org/acquisition", Type: formatMime(f),
 				Href: fmt.Sprintf("/opds/book/%s/download/%s", b.ID, f),
+			})
+		}
+		feed.Entries = append(feed.Entries, entry)
+	}
+	writeOPDS(w, r, feed)
+}
+
+// buildOPDSCollectionsFeed renders the authenticated profile's collections as
+// an OPDS navigation feed; each entry links to that collection's acquisition
+// feed at /opds/collection/{id}.
+func buildOPDSCollectionsFeed(cols []store.Collection, now time.Time) opdsFeed {
+	feed := opdsFeed{
+		XMLNS:   "http://www.w3.org/2005/Atom",
+		ID:      "tag:continuum:ebooks:opds:collections",
+		Title:   "My Collections",
+		Updated: now.UTC().Format(time.RFC3339),
+		Links: []opdsLink{
+			{Rel: "self", Type: "application/atom+xml;profile=opds-catalog", Href: "/opds/collections"},
+		},
+	}
+	for _, c := range cols {
+		feed.Entries = append(feed.Entries, opdsEntry{
+			ID:      "tag:continuum:ebooks:collection:" + c.ID,
+			Title:   c.Name,
+			Updated: now.UTC().Format(time.RFC3339),
+			Links: []opdsLink{{
+				Rel:  "subsection",
+				Type: "application/atom+xml;profile=opds-catalog;kind=acquisition",
+				Href: "/opds/collection/" + c.ID,
+			}},
+		})
+	}
+	return feed
+}
+
+func (s *Server) handleOPDSCollections(w http.ResponseWriter, r *http.Request) {
+	userID, profileID, autherr := s.opdsAuth(r)
+	if autherr != nil {
+		writeErr(w, http.StatusBadGateway, "auth service unavailable")
+		return
+	}
+	if userID == "" {
+		s.opdsChallenge(w, r)
+		return
+	}
+	cols, err := s.deps.Store.ListCollectionsByProfile(r.Context(), userID, profileID)
+	if err != nil {
+		writeInternal(w, r, err)
+		return
+	}
+	writeOPDS(w, r, buildOPDSCollectionsFeed(cols, time.Now()))
+}
+
+func (s *Server) handleOPDSCollection(w http.ResponseWriter, r *http.Request) {
+	userID, profileID, autherr := s.opdsAuth(r)
+	if autherr != nil {
+		writeErr(w, http.StatusBadGateway, "auth service unavailable")
+		return
+	}
+	if userID == "" {
+		s.opdsChallenge(w, r)
+		return
+	}
+	collectionID := chi.URLParam(r, "id")
+	items, err := s.deps.Store.ListItemsForUser(r.Context(), userID, profileID, collectionID)
+	if err != nil {
+		writeInternal(w, r, err)
+		return
+	}
+	cfg, _ := s.deps.Store.GetConfig(r.Context())
+	if !cfg.HasBackend() {
+		writeErr(w, 412, "no backend")
+		return
+	}
+	bk := backend.NewEbookBackend(s.deps.Host, cfg.BackendTarget())
+	now := time.Now()
+	feed := opdsFeed{
+		XMLNS:   "http://www.w3.org/2005/Atom",
+		ID:      "tag:continuum:ebooks:opds:collection:" + collectionID,
+		Title:   "Collection",
+		Updated: now.UTC().Format(time.RFC3339),
+		Links: []opdsLink{
+			{Rel: "self", Type: "application/atom+xml;profile=opds-catalog;kind=acquisition", Href: "/opds/collection/" + collectionID},
+		},
+	}
+	for _, item := range items {
+		d, err := bk.GetBook(r.Context(), item.BookID)
+		if err != nil {
+			writeBadGateway(w, r, err)
+			return
+		}
+		entry := opdsEntry{
+			ID:      "tag:continuum:ebooks:book:" + d.ID,
+			Title:   d.Title,
+			Summary: d.Description,
+			Updated: now.UTC().Format(time.RFC3339),
+		}
+		for _, a := range d.Authors {
+			entry.Authors = append(entry.Authors, opdsAuth{Name: a})
+		}
+		for _, f := range d.Files {
+			entry.Links = append(entry.Links, opdsLink{
+				Rel:  "http://opds-spec.org/acquisition",
+				Type: f.MimeType,
+				Href: fmt.Sprintf("/opds/book/%s/download/%s", d.ID, f.Format),
 			})
 		}
 		feed.Entries = append(feed.Entries, entry)
