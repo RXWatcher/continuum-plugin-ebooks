@@ -88,7 +88,6 @@ func (s *Server) Handler() http.Handler {
 		r.Get("/health", s.handleHealth)
 		r.Get("/me", s.handleMe)
 		s.mountUserRoutes(r)
-		s.mountContentRestrictionRoutes(r)
 		s.mountReadwiseRoutes(r)
 		s.mountHardcoverRoutes(r)
 		s.mountEreaderRoutes(r)
