@@ -142,7 +142,7 @@ func (s *Store) DeleteKosyncUser(ctx context.Context, username string) error {
 	return tx.Commit(ctx)
 }
 
-// UpsertKosyncProgress writes progress scoped to (user_id, document, device_id).
+// UpsertKosyncProgress writes progress scoped to (user_id, profile_id, document, device_id).
 // device_id collapses to ” when the client omits it so the legacy "no device"
 // case still has a stable upsert key. UserID is the authenticated session's
 // identity — callers MUST NOT take it from the request body or any
@@ -152,7 +152,7 @@ func (s *Store) UpsertKosyncProgress(ctx context.Context, p KosyncProgress) erro
 	_, err := s.pool.Exec(ctx, `
 		INSERT INTO kosync_progress (user_id, profile_id, document, progress, percentage, device, device_id, timestamp)
 		VALUES ($1, $2, $3, $4, $5, NULLIF($6,''), $7, now())
-		ON CONFLICT (user_id, profile_id, document) DO UPDATE SET
+		ON CONFLICT (user_id, profile_id, document, device_id) DO UPDATE SET
 			progress = EXCLUDED.progress, percentage = EXCLUDED.percentage,
 			device = EXCLUDED.device, device_id = EXCLUDED.device_id, timestamp = now()
 	`, p.UserID, p.ProfileID, p.Document, p.Progress, p.Percentage, p.Device, p.DeviceID)

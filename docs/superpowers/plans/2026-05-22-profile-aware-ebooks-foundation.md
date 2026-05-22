@@ -699,12 +699,12 @@ ALTER TABLE kosync_progress
 ALTER TABLE kosync_book_link
   ADD COLUMN profile_id TEXT NOT NULL DEFAULT '';
 
--- Re-key progress and book-link on the profile so each profile keeps its own
--- reading position. kosync_progress was PRIMARY KEY (user_id, document);
--- kosync_book_link was PRIMARY KEY (document, user_id).
+-- Re-key progress and book-link on the profile. kosync_progress PK is
+-- (user_id, document, device_id) — set by migration 0006 to isolate progress
+-- per device; device_id MUST be kept. kosync_book_link PK is (document, user_id).
 ALTER TABLE kosync_progress DROP CONSTRAINT kosync_progress_pkey;
 ALTER TABLE kosync_progress
-  ADD PRIMARY KEY (user_id, profile_id, document);
+  ADD PRIMARY KEY (user_id, profile_id, document, device_id);
 ALTER TABLE kosync_book_link DROP CONSTRAINT kosync_book_link_pkey;
 ALTER TABLE kosync_book_link
   ADD PRIMARY KEY (document, user_id, profile_id);
