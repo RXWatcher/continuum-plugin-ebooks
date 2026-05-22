@@ -176,6 +176,7 @@ func main() {
 			KoboRefs:     koboRefs,
 			WebFS:        web.FS(),
 			Recommender:  recommender,
+			Credentials:  server.NewHostCredentialValidator(),
 		})
 		httpSrv.SetHandler(srv.Handler())
 

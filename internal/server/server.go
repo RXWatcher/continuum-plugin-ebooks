@@ -43,6 +43,7 @@ type Deps struct {
 	// embeddings aren't configured and the route returns empty
 	// results (200 with items=[]).
 	Recommender Recommender
+	Credentials CredentialValidator
 }
 
 type EventPublisher interface {
