@@ -1141,7 +1141,7 @@ func (s *Server) handleCancelRequest(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleListMyCollections(w http.ResponseWriter, r *http.Request) {
 	id, _ := auth.FromContext(r.Context())
-	cs, _ := s.deps.Store.ListCollectionsByUser(r.Context(), id.UserID)
+	cs, _ := s.deps.Store.ListCollectionsByProfile(r.Context(), id.UserID, id.ProfileID)
 	// Use writeItems (nonNilSlice) so nil → []. encoding/json marshals nil
 	// slices as `null`, which crashes SPA code like `data?.items.length`
 	// (optional chaining short-circuits on data being null, but null.length
@@ -1162,7 +1162,7 @@ func (s *Server) handleCreateCollection(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	c := store.Collection{
-		ID: ulid.Make().String(), UserID: id.UserID, Name: body.Name,
+		ID: ulid.Make().String(), UserID: id.UserID, ProfileID: id.ProfileID, Name: body.Name,
 		Color: body.Color, IsPublic: body.IsPublic, IsPinned: body.IsPinned,
 	}
 	if err := s.deps.Store.CreateCollection(r.Context(), c); err != nil {
@@ -1175,7 +1175,7 @@ func (s *Server) handleCreateCollection(w http.ResponseWriter, r *http.Request) 
 func (s *Server) handleDeleteCollection(w http.ResponseWriter, r *http.Request) {
 	id, _ := auth.FromContext(r.Context())
 	cid := chi.URLParam(r, "id")
-	if err := s.deps.Store.DeleteCollection(r.Context(), cid, id.UserID); err != nil {
+	if err := s.deps.Store.DeleteCollection(r.Context(), cid, id.UserID, id.ProfileID); err != nil {
 		writeErr(w, 404, err.Error())
 		return
 	}
@@ -1199,6 +1199,7 @@ func (s *Server) handleUpdateCollection(w http.ResponseWriter, r *http.Request) 
 	c := store.Collection{
 		ID:          cid,
 		UserID:      id.UserID,
+		ProfileID:   id.ProfileID,
 		Name:        body.Name,
 		Color:       body.Color,
 		IsPublic:    body.IsPublic,
@@ -1215,7 +1216,7 @@ func (s *Server) handleUpdateCollection(w http.ResponseWriter, r *http.Request) 
 func (s *Server) handleListCollectionItems(w http.ResponseWriter, r *http.Request) {
 	id, _ := auth.FromContext(r.Context())
 	cid := chi.URLParam(r, "id")
-	items, err := s.deps.Store.ListItemsForUser(r.Context(), id.UserID, cid)
+	items, err := s.deps.Store.ListItemsForUser(r.Context(), id.UserID, id.ProfileID, cid)
 	if err != nil {
 		writeInternal(w, r, err)
 		return
@@ -1231,7 +1232,7 @@ func (s *Server) handleAddCollectionItem(w http.ResponseWriter, r *http.Request)
 		Position int    `json:"position"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&body)
-	if err := s.deps.Store.AddItemForUser(r.Context(), id.UserID, cid, body.BookID, body.Position); err != nil {
+	if err := s.deps.Store.AddItemForUser(r.Context(), id.UserID, id.ProfileID, cid, body.BookID, body.Position); err != nil {
 		writeErr(w, 404, err.Error())
 		return
 	}
@@ -1242,7 +1243,7 @@ func (s *Server) handleRemoveCollectionItem(w http.ResponseWriter, r *http.Reque
 	id, _ := auth.FromContext(r.Context())
 	cid := chi.URLParam(r, "id")
 	bid := chi.URLParam(r, "bookId")
-	if err := s.deps.Store.RemoveItemForUser(r.Context(), id.UserID, cid, bid); err != nil {
+	if err := s.deps.Store.RemoveItemForUser(r.Context(), id.UserID, id.ProfileID, cid, bid); err != nil {
 		writeErr(w, 404, err.Error())
 		return
 	}

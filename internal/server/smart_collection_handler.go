@@ -42,7 +42,8 @@ func (s *Server) mountSmartCollectionRoutes(r chi.Router) {
 func (s *Server) handleListSmartCollections(w http.ResponseWriter, r *http.Request) {
 	ident, _ := auth.FromContext(r.Context())
 	userID := ident.UserID
-	rows, err := s.deps.Store.ListSmartCollections(r.Context(), userID, 200)
+	profileID := ident.ProfileID
+	rows, err := s.deps.Store.ListSmartCollections(r.Context(), userID, profileID, 200)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -57,6 +58,7 @@ func (s *Server) handleListSmartCollections(w http.ResponseWriter, r *http.Reque
 func (s *Server) handleGetSmartCollection(w http.ResponseWriter, r *http.Request) {
 	ident, _ := auth.FromContext(r.Context())
 	userID := ident.UserID
+	profileID := ident.ProfileID
 	c, err := s.deps.Store.GetSmartCollection(r.Context(), chi.URLParam(r, "id"))
 	if errors.Is(err, store.ErrNotFound) {
 		http.Error(w, "smart collection not found", http.StatusNotFound)
@@ -66,7 +68,7 @@ func (s *Server) handleGetSmartCollection(w http.ResponseWriter, r *http.Request
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if c.UserID != userID && !c.IsPublic {
+	if !c.IsPublic && (c.UserID != userID || c.ProfileID != profileID) {
 		http.Error(w, "not visible to this user", http.StatusNotFound)
 		return
 	}
@@ -84,6 +86,7 @@ func (s *Server) handleCreateSmartCollection(w http.ResponseWriter, r *http.Requ
 func (s *Server) handleUpdateSmartCollection(w http.ResponseWriter, r *http.Request) {
 	ident, _ := auth.FromContext(r.Context())
 	userID := ident.UserID
+	profileID := ident.ProfileID
 	existing, err := s.deps.Store.GetSmartCollection(r.Context(), chi.URLParam(r, "id"))
 	if errors.Is(err, store.ErrNotFound) {
 		http.Error(w, "smart collection not found", http.StatusNotFound)
@@ -93,7 +96,7 @@ func (s *Server) handleUpdateSmartCollection(w http.ResponseWriter, r *http.Requ
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if existing.UserID != userID {
+	if existing.UserID != userID || existing.ProfileID != profileID {
 		http.Error(w, "not owned by this user", http.StatusForbidden)
 		return
 	}
@@ -107,7 +110,8 @@ func (s *Server) handleUpdateSmartCollection(w http.ResponseWriter, r *http.Requ
 func (s *Server) handleDeleteSmartCollection(w http.ResponseWriter, r *http.Request) {
 	ident, _ := auth.FromContext(r.Context())
 	userID := ident.UserID
-	if err := s.deps.Store.DeleteSmartCollection(r.Context(), chi.URLParam(r, "id"), userID); err != nil {
+	profileID := ident.ProfileID
+	if err := s.deps.Store.DeleteSmartCollection(r.Context(), chi.URLParam(r, "id"), userID, profileID); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -125,6 +129,7 @@ func (s *Server) handleDeleteSmartCollection(w http.ResponseWriter, r *http.Requ
 func (s *Server) handleSmartCollectionItems(w http.ResponseWriter, r *http.Request) {
 	ident, _ := auth.FromContext(r.Context())
 	userID := ident.UserID
+	profileID := ident.ProfileID
 	c, err := s.deps.Store.GetSmartCollection(r.Context(), chi.URLParam(r, "id"))
 	if errors.Is(err, store.ErrNotFound) {
 		http.Error(w, "smart collection not found", http.StatusNotFound)
@@ -134,7 +139,7 @@ func (s *Server) handleSmartCollectionItems(w http.ResponseWriter, r *http.Reque
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if c.UserID != userID && !c.IsPublic {
+	if !c.IsPublic && (c.UserID != userID || c.ProfileID != profileID) {
 		http.Error(w, "not visible to this user", http.StatusNotFound)
 		return
 	}
@@ -203,7 +208,7 @@ func (s *Server) handleSmartCollectionItems(w http.ResponseWriter, r *http.Reque
 	}
 
 	matched := smartcoll.Evaluate(r.Context(), qd, candidates, smartcoll.EvaluateOptions{
-		AllowPersonalized: c.UserID == userID,
+		AllowPersonalized: c.UserID == userID && c.ProfileID == profileID,
 		UserSeed:          userID + ":" + c.ID,
 		Now:               time.Now(),
 	})
@@ -234,6 +239,7 @@ func (s *Server) handleSmartCollectionItems(w http.ResponseWriter, r *http.Reque
 func (s *Server) persistSmartCollection(w http.ResponseWriter, r *http.Request, existingID string) (store.SmartCollection, error) {
 	ident, _ := auth.FromContext(r.Context())
 	userID := ident.UserID
+	profileID := ident.ProfileID
 	var body smartCollectionBody
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "invalid body", http.StatusBadRequest)
@@ -258,7 +264,7 @@ func (s *Server) persistSmartCollection(w http.ResponseWriter, r *http.Request, 
 		id = ulid.Make().String()
 	}
 	c := store.SmartCollection{
-		ID: id, UserID: userID, Name: body.Name, Description: body.Description,
+		ID: id, UserID: userID, ProfileID: profileID, Name: body.Name, Description: body.Description,
 		Color: body.Color, IsPublic: body.IsPublic, IsPinned: body.IsPinned,
 		QueryDef: defJSON,
 	}
