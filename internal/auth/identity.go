@@ -16,10 +16,11 @@ const identityKey ctxKey = 1
 
 // Identity is the per-request user the host authenticated.
 type Identity struct {
-	UserID   string
-	Username string
-	Email    string
-	IsAdmin  bool
+	UserID    string
+	ProfileID string
+	Username  string
+	Email     string
+	IsAdmin   bool
 }
 
 // FromContext returns the Identity attached to ctx by Middleware, plus a
@@ -33,9 +34,10 @@ func FromContext(ctx context.Context) (Identity, bool) {
 func Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		id := Identity{
-			UserID:   r.Header.Get("X-Continuum-User-Id"),
-			Username: r.Header.Get("X-Continuum-User-Username"),
-			Email:    r.Header.Get("X-Continuum-User-Email"),
+			UserID:    r.Header.Get("X-Continuum-User-Id"),
+			ProfileID: r.Header.Get("X-Continuum-Profile-Id"),
+			Username:  r.Header.Get("X-Continuum-User-Username"),
+			Email:     r.Header.Get("X-Continuum-User-Email"),
 		}
 		roles := r.Header.Get("X-Continuum-User-Role")
 		if roles == "" {

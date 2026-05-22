@@ -51,3 +51,17 @@ func TestMiddlewareFallsBackToPluralRolesHeader(t *testing.T) {
 		t.Fatal("IsAdmin = false, want true for fallback plural roles header")
 	}
 }
+
+func TestMiddlewareReadsProfileID(t *testing.T) {
+	var got Identity
+	h := Middleware(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		got, _ = FromContext(r.Context())
+	}))
+	r := httptest.NewRequest("GET", "/", nil)
+	r.Header.Set("X-Continuum-User-Id", "u-1")
+	r.Header.Set("X-Continuum-Profile-Id", "p-9")
+	h.ServeHTTP(httptest.NewRecorder(), r)
+	if got.UserID != "u-1" || got.ProfileID != "p-9" {
+		t.Errorf("identity = %+v, want user u-1 profile p-9", got)
+	}
+}
