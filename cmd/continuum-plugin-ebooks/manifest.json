@@ -56,13 +56,6 @@
     },
     {
       "type": "scheduled_task.v1",
-      "id": "opds_token_pruner",
-      "display_name": "Prune revoked OPDS tokens",
-      "cron": "0 3 * * *",
-      "description": "Deletes revoked OPDS authentication tokens."
-    },
-    {
-      "type": "scheduled_task.v1",
       "id": "kindle_send_retrier",
       "display_name": "Retry queued Kindle sends",
       "cron": "*/2 * * * *",
