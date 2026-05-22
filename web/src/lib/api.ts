@@ -795,34 +795,6 @@ export const uploadCustomFont = async (file: File, name?: string) => {
 export const deleteCustomFont = (id: string) =>
   api.delete(`/api/v1/me/fonts/${encodeURIComponent(id)}`);
 
-// -- Admin: content restrictions ---------------------------------------
-
-export type ContentRestriction = {
-  user_id: string;
-  blocked_libraries?: number[];
-  blocked_genres?: string[];
-  blocked_tags?: string[];
-  blocked_authors?: string[];
-  explicit_blocked?: boolean;
-  created_at?: string;
-  updated_at?: string;
-};
-
-export const listContentRestrictions = () =>
-  api.get<{ items: ContentRestriction[] }>(`/api/v1/admin/content-restrictions`);
-
-export const putContentRestriction = (
-  userId: string,
-  body: Partial<ContentRestriction>,
-) =>
-  api.put<ContentRestriction>(
-    `/api/v1/admin/content-restrictions/${encodeURIComponent(userId)}`,
-    body,
-  );
-
-export const deleteContentRestriction = (userId: string) =>
-  api.delete(`/api/v1/admin/content-restrictions/${encodeURIComponent(userId)}`);
-
 // -- Admin: custom metadata providers ----------------------------------
 
 export type CustomMetadataProvider = {
