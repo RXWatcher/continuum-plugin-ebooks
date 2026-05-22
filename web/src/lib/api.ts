@@ -879,30 +879,6 @@ export const getBookActivity = (bookId: string) =>
     `/api/v1/me/books/${encodeURIComponent(bookId)}/activity`,
   );
 
-// -- OPDS tokens -----------------------------------------------------------
-
-export type OPDSToken = {
-  id: string;
-  label?: string;
-  last_used_at?: string;
-  created_at?: string;
-  revoked?: boolean;
-};
-
-export const listOPDSTokens = () =>
-  api.get<{ items: OPDSToken[] }>(`/api/v1/me/opds-tokens`);
-
-export const createOPDSToken = (label: string) =>
-  api.post<{ id: string; label: string; jti_shown_once: string }>(
-    `/api/v1/me/opds-tokens`,
-    {
-      label,
-    },
-  );
-
-export const revokeOPDSToken = (id: string) =>
-  api.delete(`/api/v1/me/opds-tokens/${encodeURIComponent(id)}`);
-
 // -- Kosync ----------------------------------------------------------------
 
 export type KosyncStatus = { registered: boolean; kosync_username?: string };
