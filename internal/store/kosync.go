@@ -11,6 +11,7 @@ import (
 
 type KosyncUser struct {
 	UserID             string
+	ProfileID          string
 	KosyncUsername     string
 	KosyncPasswordHash string
 	CreatedAt          time.Time
@@ -18,6 +19,7 @@ type KosyncUser struct {
 
 type KosyncProgress struct {
 	UserID     string
+	ProfileID  string
 	Document   string
 	Progress   string
 	Device     string
@@ -27,11 +29,12 @@ type KosyncProgress struct {
 }
 
 type KosyncBookLink struct {
-	Document string
-	BookID   string
-	Format   string
-	UserID   string
-	LinkedAt time.Time
+	Document  string
+	BookID    string
+	Format    string
+	UserID    string
+	ProfileID string
+	LinkedAt  time.Time
 }
 
 func (s *Store) UpsertKosyncUser(ctx context.Context, u KosyncUser) error {
@@ -41,12 +44,12 @@ func (s *Store) UpsertKosyncUser(ctx context.Context, u KosyncUser) error {
 	// updates zero rows). kosync_username stays globally unique because
 	// auth lookup is by username.
 	tag, err := s.pool.Exec(ctx, `
-		INSERT INTO kosync_user (user_id, kosync_username, kosync_password_hash)
-		VALUES ($1, $2, $3)
+		INSERT INTO kosync_user (user_id, profile_id, kosync_username, kosync_password_hash)
+		VALUES ($1, $2, $3, $4)
 		ON CONFLICT (kosync_username) DO UPDATE
 			SET kosync_password_hash = EXCLUDED.kosync_password_hash
 			WHERE kosync_user.user_id = EXCLUDED.user_id
-	`, u.UserID, u.KosyncUsername, u.KosyncPasswordHash)
+	`, u.UserID, u.ProfileID, u.KosyncUsername, u.KosyncPasswordHash)
 	if err != nil {
 		return fmt.Errorf("upsert kosync_user: %w", err)
 	}
@@ -65,10 +68,10 @@ func (s *Store) UpsertKosyncUser(ctx context.Context, u KosyncUser) error {
 // authenticated /api/v1/me/kosync/register path (UpsertKosyncUser).
 func (s *Store) CreateKosyncUserStrict(ctx context.Context, u KosyncUser) error {
 	tag, err := s.pool.Exec(ctx, `
-		INSERT INTO kosync_user (user_id, kosync_username, kosync_password_hash)
-		VALUES ($1, $2, $3)
+		INSERT INTO kosync_user (user_id, profile_id, kosync_username, kosync_password_hash)
+		VALUES ($1, $2, $3, $4)
 		ON CONFLICT (kosync_username) DO NOTHING
-	`, u.UserID, u.KosyncUsername, u.KosyncPasswordHash)
+	`, u.UserID, u.ProfileID, u.KosyncUsername, u.KosyncPasswordHash)
 	if err != nil {
 		return fmt.Errorf("create kosync_user: %w", err)
 	}
@@ -80,11 +83,11 @@ func (s *Store) CreateKosyncUserStrict(ctx context.Context, u KosyncUser) error 
 
 func (s *Store) GetKosyncUserByUsername(ctx context.Context, username string) (KosyncUser, error) {
 	row := s.pool.QueryRow(ctx, `
-		SELECT user_id, kosync_username, kosync_password_hash, created_at
+		SELECT user_id, profile_id, kosync_username, kosync_password_hash, created_at
 		FROM kosync_user WHERE kosync_username = $1
 	`, username)
 	var u KosyncUser
-	if err := row.Scan(&u.UserID, &u.KosyncUsername, &u.KosyncPasswordHash, &u.CreatedAt); err != nil {
+	if err := row.Scan(&u.UserID, &u.ProfileID, &u.KosyncUsername, &u.KosyncPasswordHash, &u.CreatedAt); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return KosyncUser{}, ErrNotFound
 		}
@@ -94,7 +97,7 @@ func (s *Store) GetKosyncUserByUsername(ctx context.Context, username string) (K
 }
 
 func (s *Store) ListKosyncUsers(ctx context.Context) ([]KosyncUser, error) {
-	rows, err := s.pool.Query(ctx, `SELECT user_id, kosync_username, kosync_password_hash, created_at FROM kosync_user ORDER BY created_at DESC LIMIT 500`)
+	rows, err := s.pool.Query(ctx, `SELECT user_id, profile_id, kosync_username, kosync_password_hash, created_at FROM kosync_user ORDER BY created_at DESC LIMIT 500`)
 	if err != nil {
 		return nil, fmt.Errorf("list kosync users: %w", err)
 	}
@@ -102,7 +105,7 @@ func (s *Store) ListKosyncUsers(ctx context.Context) ([]KosyncUser, error) {
 	var out []KosyncUser
 	for rows.Next() {
 		var u KosyncUser
-		if err := rows.Scan(&u.UserID, &u.KosyncUsername, &u.KosyncPasswordHash, &u.CreatedAt); err != nil {
+		if err := rows.Scan(&u.UserID, &u.ProfileID, &u.KosyncUsername, &u.KosyncPasswordHash, &u.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scan: %w", err)
 		}
 		out = append(out, u)
@@ -147,12 +150,12 @@ func (s *Store) DeleteKosyncUser(ctx context.Context, username string) error {
 // user's progress.
 func (s *Store) UpsertKosyncProgress(ctx context.Context, p KosyncProgress) error {
 	_, err := s.pool.Exec(ctx, `
-		INSERT INTO kosync_progress (user_id, document, progress, percentage, device, device_id, timestamp)
-		VALUES ($1, $2, $3, $4, NULLIF($5,''), $6, now())
-		ON CONFLICT (user_id, document, device_id) DO UPDATE SET
+		INSERT INTO kosync_progress (user_id, profile_id, document, progress, percentage, device, device_id, timestamp)
+		VALUES ($1, $2, $3, $4, $5, NULLIF($6,''), $7, now())
+		ON CONFLICT (user_id, profile_id, document) DO UPDATE SET
 			progress = EXCLUDED.progress, percentage = EXCLUDED.percentage,
-			device = EXCLUDED.device, timestamp = now()
-	`, p.UserID, p.Document, p.Progress, p.Percentage, p.Device, p.DeviceID)
+			device = EXCLUDED.device, device_id = EXCLUDED.device_id, timestamp = now()
+	`, p.UserID, p.ProfileID, p.Document, p.Progress, p.Percentage, p.Device, p.DeviceID)
 	if err != nil {
 		return fmt.Errorf("upsert kosync_progress: %w", err)
 	}
@@ -160,17 +163,15 @@ func (s *Store) UpsertKosyncProgress(ctx context.Context, p KosyncProgress) erro
 }
 
 // GetKosyncProgress returns the most-recent progress row for (user_id,
-// document) across all of that user's devices. KOReader's contract is "latest
-// wins on read", so we order by timestamp DESC and return the freshest tuple;
-// the device_id PK only protects against cross-device clobbering on writes.
-func (s *Store) GetKosyncProgress(ctx context.Context, userID, document string) (KosyncProgress, error) {
+// profile_id, document). KOReader's contract is "latest wins on read".
+func (s *Store) GetKosyncProgress(ctx context.Context, userID, profileID, document string) (KosyncProgress, error) {
 	row := s.pool.QueryRow(ctx, `
-		SELECT user_id, document, progress, percentage, COALESCE(device,''), device_id, timestamp
-		FROM kosync_progress WHERE user_id = $1 AND document = $2
+		SELECT user_id, profile_id, document, progress, percentage, COALESCE(device,''), device_id, timestamp
+		FROM kosync_progress WHERE user_id = $1 AND profile_id = $2 AND document = $3
 		ORDER BY timestamp DESC, device_id DESC LIMIT 1
-	`, userID, document)
+	`, userID, profileID, document)
 	var p KosyncProgress
-	if err := row.Scan(&p.UserID, &p.Document, &p.Progress, &p.Percentage, &p.Device, &p.DeviceID, &p.Timestamp); err != nil {
+	if err := row.Scan(&p.UserID, &p.ProfileID, &p.Document, &p.Progress, &p.Percentage, &p.Device, &p.DeviceID, &p.Timestamp); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return KosyncProgress{}, ErrNotFound
 		}
@@ -181,22 +182,22 @@ func (s *Store) GetKosyncProgress(ctx context.Context, userID, document string) 
 
 func (s *Store) UpsertKosyncBookLink(ctx context.Context, l KosyncBookLink) error {
 	_, err := s.pool.Exec(ctx, `
-		INSERT INTO kosync_book_link (document, book_id, format, user_id) VALUES ($1, $2, $3, $4)
-		ON CONFLICT (document, user_id) DO UPDATE SET book_id = EXCLUDED.book_id, format = EXCLUDED.format
-	`, l.Document, l.BookID, l.Format, l.UserID)
+		INSERT INTO kosync_book_link (document, book_id, format, user_id, profile_id) VALUES ($1, $2, $3, $4, $5)
+		ON CONFLICT (document, user_id, profile_id) DO UPDATE SET book_id = EXCLUDED.book_id, format = EXCLUDED.format
+	`, l.Document, l.BookID, l.Format, l.UserID, l.ProfileID)
 	if err != nil {
 		return fmt.Errorf("upsert kosync_book_link: %w", err)
 	}
 	return nil
 }
 
-func (s *Store) FindKosyncBookLinkByBook(ctx context.Context, userID, bookID string) (KosyncBookLink, error) {
+func (s *Store) FindKosyncBookLinkByBook(ctx context.Context, userID, profileID, bookID string) (KosyncBookLink, error) {
 	row := s.pool.QueryRow(ctx, `
-		SELECT document, book_id, format, user_id, linked_at
-		FROM kosync_book_link WHERE user_id = $1 AND book_id = $2 LIMIT 1
-	`, userID, bookID)
+		SELECT document, book_id, format, user_id, profile_id, linked_at
+		FROM kosync_book_link WHERE user_id = $1 AND profile_id = $2 AND book_id = $3 LIMIT 1
+	`, userID, profileID, bookID)
 	var l KosyncBookLink
-	if err := row.Scan(&l.Document, &l.BookID, &l.Format, &l.UserID, &l.LinkedAt); err != nil {
+	if err := row.Scan(&l.Document, &l.BookID, &l.Format, &l.UserID, &l.ProfileID, &l.LinkedAt); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return KosyncBookLink{}, ErrNotFound
 		}

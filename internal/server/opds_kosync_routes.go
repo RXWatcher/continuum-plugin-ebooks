@@ -511,7 +511,6 @@ func (s *Server) opdsChallenge(w http.ResponseWriter, r *http.Request) {
 // -- kosync routes --------------------------------------------------------
 
 func (s *Server) mountKosync(r chi.Router) {
-	r.Post("/users/create", s.handleKosyncCreate)
 	r.Post("/users/auth", s.handleKosyncAuth)
 	r.Get("/syncs/progress/{document}", s.handleKosyncGetProgress)
 	r.Put("/syncs/progress", s.handleKosyncPutProgress)
@@ -531,6 +530,11 @@ func (s *Server) handleKosyncCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id, _ := auth.FromContext(r.Context())
+	if id.UserID == "" {
+		writeErr(w, 401, "authentication required")
+		return
+	}
+
 	// KOReader hashes password client-side as sha1(password) → we then bcrypt.
 	pwsha1 := sha1.Sum([]byte(body.Password))
 	pwhex := hex.EncodeToString(pwsha1[:])
@@ -541,38 +545,25 @@ func (s *Server) handleKosyncCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// This handler serves BOTH the public KOReader /kosync/users/create
-	// (access:"public" — the host injects NO identity, so id.UserID == "")
-	// and the authenticated /api/v1/me/kosync/register. When unauthenticated,
-	// the kosync account is standalone and MUST be keyed by its globally
-	// unique username, not the empty continuum id — otherwise every
-	// KOReader-registered user collapses to user_id="" and (a) shares/clobbers
-	// every other user's reading progress and (b) the owner-scoped upsert
-	// lets anyone overwrite an existing account's password (takeover).
-	if id.UserID == "" {
-		owner := "kosync:" + body.Username
-		if err := s.deps.Store.CreateKosyncUserStrict(r.Context(), store.KosyncUser{
-			UserID:             owner,
-			KosyncUsername:     body.Username,
-			KosyncPasswordHash: string(hash),
-		}); err != nil {
-			if errors.Is(err, store.ErrKosyncUsernameTaken) {
-				writeErr(w, 409, "kosync username already taken")
-				return
-			}
-			slog.Error("kosync create", "err", err)
-			writeErr(w, 500, "internal error")
-			return
-		}
-		writeJSON(w, 200, map[string]any{"username": body.Username})
-		return
+	// Compute the kosync username: bare userName for the primary profile,
+	// userName#profileName for named profiles. Profile names come from the
+	// host-injected headers so the SPA can pass them through on registration.
+	userName := r.Header.Get("X-Continuum-User-Name")
+	if userName == "" {
+		userName = body.Username
+	}
+	profileName := r.Header.Get("X-Continuum-Profile-Name")
+	kosyncUsername := userName
+	if id.ProfileID != "" && profileName != "" {
+		kosyncUsername = userName + "#" + profileName
 	}
 
-	// Authenticated path: the continuum user owns the account and may rotate
-	// their own password (owner-scoped DO UPDATE).
+	// Authenticated registration: the continuum user owns the account and may
+	// rotate their own password (owner-scoped DO UPDATE).
 	if err := s.deps.Store.UpsertKosyncUser(r.Context(), store.KosyncUser{
 		UserID:             id.UserID,
-		KosyncUsername:     body.Username,
+		ProfileID:          id.ProfileID,
+		KosyncUsername:     kosyncUsername,
 		KosyncPasswordHash: string(hash),
 	}); err != nil {
 		if errors.Is(err, store.ErrKosyncUsernameTaken) {
@@ -583,7 +574,7 @@ func (s *Server) handleKosyncCreate(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 500, "internal error")
 		return
 	}
-	writeJSON(w, 200, map[string]any{"username": body.Username})
+	writeJSON(w, 200, map[string]any{"username": kosyncUsername})
 }
 
 func (s *Server) kosyncAuthHeader(r *http.Request) (store.KosyncUser, error) {
@@ -617,7 +608,7 @@ func (s *Server) handleKosyncGetProgress(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	doc := chi.URLParam(r, "document")
-	p, err := s.deps.Store.GetKosyncProgress(r.Context(), u.UserID, doc)
+	p, err := s.deps.Store.GetKosyncProgress(r.Context(), u.UserID, u.ProfileID, doc)
 	if err != nil {
 		writeJSON(w, 200, nil)
 		return
@@ -653,7 +644,7 @@ func (s *Server) handleKosyncPutProgress(w http.ResponseWriter, r *http.Request)
 	// (user_id, document, device_id) primary key, so a malicious client can
 	// only collide with rows owned by their own user.
 	if err := s.deps.Store.UpsertKosyncProgress(r.Context(), store.KosyncProgress{
-		UserID: u.UserID, Document: body.Document, Progress: body.Progress,
+		UserID: u.UserID, ProfileID: u.ProfileID, Document: body.Document, Progress: body.Progress,
 		Percentage: body.Percentage, Device: body.Device, DeviceID: body.DeviceID,
 	}); err != nil {
 		writeInternal(w, r, err)
@@ -667,7 +658,7 @@ func (s *Server) handleKosyncStatus(w http.ResponseWriter, r *http.Request) {
 	id, _ := auth.FromContext(r.Context())
 	users, _ := s.deps.Store.ListKosyncUsers(r.Context())
 	for _, u := range users {
-		if u.UserID == id.UserID {
+		if u.UserID == id.UserID && u.ProfileID == id.ProfileID {
 			writeJSON(w, 200, map[string]any{
 				"registered": true, "kosync_username": u.KosyncUsername,
 			})
@@ -685,7 +676,7 @@ func (s *Server) handleKosyncDelete(w http.ResponseWriter, r *http.Request) {
 	id, _ := auth.FromContext(r.Context())
 	users, _ := s.deps.Store.ListKosyncUsers(r.Context())
 	for _, u := range users {
-		if u.UserID == id.UserID {
+		if u.UserID == id.UserID && u.ProfileID == id.ProfileID {
 			_ = s.deps.Store.DeleteKosyncUser(r.Context(), u.KosyncUsername)
 			w.WriteHeader(204)
 			return

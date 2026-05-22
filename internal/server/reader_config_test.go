@@ -263,7 +263,7 @@ func TestKosyncBookLinkRoute(t *testing.T) {
 		t.Fatalf("link status=%d body=%s", rec.Code, rec.Body.String())
 	}
 
-	link, err := srv.deps.Store.FindKosyncBookLinkByBook(context.Background(), "user-1", "book-1")
+	link, err := srv.deps.Store.FindKosyncBookLinkByBook(context.Background(), "user-1", "", "book-1")
 	if err != nil {
 		t.Fatalf("FindKosyncBookLinkByBook: %v", err)
 	}

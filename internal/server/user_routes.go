@@ -338,7 +338,7 @@ func (s *Server) handleGetReaderConfig(w http.ResponseWriter, r *http.Request) {
 		if err == store.ErrNotFound {
 			if userData, dataErr := s.deps.Store.GetUserData(r.Context(), id.UserID, bookID); dataErr == nil {
 				config := readerConfigFromUserData(userData)
-				s.addExternalReaderProgress(r.Context(), id.UserID, bookID, config)
+				s.addExternalReaderProgress(r.Context(), id.UserID, id.ProfileID, bookID, config)
 				writeJSON(w, 200, map[string]any{
 					"book_id": bookID,
 					"config":  config,
@@ -346,7 +346,7 @@ func (s *Server) handleGetReaderConfig(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			config := map[string]any{}
-			s.addExternalReaderProgress(r.Context(), id.UserID, bookID, config)
+			s.addExternalReaderProgress(r.Context(), id.UserID, id.ProfileID, bookID, config)
 			writeJSON(w, 200, map[string]any{
 				"book_id": bookID,
 				"config":  config,
@@ -361,7 +361,7 @@ func (s *Server) handleGetReaderConfig(w http.ResponseWriter, r *http.Request) {
 		writeInternal(w, r, err)
 		return
 	}
-	s.addExternalReaderProgress(r.Context(), id.UserID, bookID, config)
+	s.addExternalReaderProgress(r.Context(), id.UserID, id.ProfileID, bookID, config)
 	writeJSON(w, 200, map[string]any{
 		"book_id":    bookID,
 		"config":     config,
@@ -385,12 +385,12 @@ func readerConfigFromUserData(row store.UserData) map[string]any {
 	return config
 }
 
-func (s *Server) addExternalReaderProgress(ctx context.Context, userID, bookID string, config map[string]any) {
-	link, err := s.deps.Store.FindKosyncBookLinkByBook(ctx, userID, bookID)
+func (s *Server) addExternalReaderProgress(ctx context.Context, userID, profileID, bookID string, config map[string]any) {
+	link, err := s.deps.Store.FindKosyncBookLinkByBook(ctx, userID, profileID, bookID)
 	if err != nil {
 		return
 	}
-	progress, err := s.deps.Store.GetKosyncProgress(ctx, userID, link.Document)
+	progress, err := s.deps.Store.GetKosyncProgress(ctx, userID, profileID, link.Document)
 	if err != nil {
 		return
 	}
@@ -467,10 +467,11 @@ func (s *Server) handleLinkKosyncBook(w http.ResponseWriter, r *http.Request) {
 		body.Format = "epub"
 	}
 	if err := s.deps.Store.UpsertKosyncBookLink(r.Context(), store.KosyncBookLink{
-		UserID:   id.UserID,
-		BookID:   bookID,
-		Document: body.Document,
-		Format:   body.Format,
+		UserID:    id.UserID,
+		ProfileID: id.ProfileID,
+		BookID:    bookID,
+		Document:  body.Document,
+		Format:    body.Format,
 	}); err != nil {
 		writeInternal(w, r, err)
 		return

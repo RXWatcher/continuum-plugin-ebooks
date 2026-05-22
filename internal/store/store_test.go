@@ -254,7 +254,7 @@ func TestE3_KosyncProgress_DeviceIDBinding(t *testing.T) {
 
 	// Read-back returns the latest row for (user, doc) — kindle-1 had the
 	// most recent write so its 0.55 should win.
-	got, err := s.GetKosyncProgress(ctx, "alice", "doc-x")
+	got, err := s.GetKosyncProgress(ctx, "alice", "", "doc-x")
 	if err != nil {
 		t.Fatalf("GetKosyncProgress alice: %v", err)
 	}
@@ -266,7 +266,7 @@ func TestE3_KosyncProgress_DeviceIDBinding(t *testing.T) {
 	}
 
 	// Bob's row for the same (document, device_id) must be untouched.
-	gotBob, err := s.GetKosyncProgress(ctx, "bob", "doc-x")
+	gotBob, err := s.GetKosyncProgress(ctx, "bob", "", "doc-x")
 	if err != nil {
 		t.Fatalf("GetKosyncProgress bob: %v", err)
 	}
