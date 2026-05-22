@@ -49,7 +49,7 @@ Frontend (`web/src/`):
 - Modify: `internal/auth/identity.go`
 - Test: `internal/auth/identity_test.go`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Add to `internal/auth/identity_test.go`:
 
@@ -71,12 +71,12 @@ func TestMiddlewareReadsProfileID(t *testing.T) {
 
 If `net/http`/`net/http/httptest` are not imported in the test file, add them.
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `go test ./internal/auth/ -run TestMiddlewareReadsProfileID`
 Expected: FAIL — `Identity` has no field `ProfileID`.
 
-- [ ] **Step 3: Add the field and header read**
+- [x] **Step 3: Add the field and header read**
 
 In `internal/auth/identity.go`, add `ProfileID string` to the `Identity` struct after `UserID string`. In `Middleware`, add to the `Identity{...}` literal:
 
@@ -84,12 +84,12 @@ In `internal/auth/identity.go`, add `ProfileID string` to the `Identity` struct 
 		ProfileID: r.Header.Get("X-Continuum-Profile-Id"),
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `go test ./internal/auth/ -run TestMiddlewareReadsProfileID`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add internal/auth/identity.go internal/auth/identity_test.go
@@ -105,7 +105,7 @@ git commit -m "feat(ebooks): profile id on Identity"
 - Modify: `internal/server/server.go` (`Deps`)
 - Modify: `cmd/continuum-plugin-ebooks/main.go`
 
-- [ ] **Step 1: Create the interface and wrapper**
+- [x] **Step 1: Create the interface and wrapper**
 
 Create `internal/server/credential.go`:
 
@@ -149,7 +149,7 @@ func (hostCredentialValidator) ValidateProfileCredential(
 }
 ```
 
-- [ ] **Step 2: Add Credentials to Deps**
+- [x] **Step 2: Add Credentials to Deps**
 
 In `internal/server/server.go`, add a field to the `Deps` struct:
 
@@ -157,7 +157,7 @@ In `internal/server/server.go`, add a field to the `Deps` struct:
 	Credentials CredentialValidator
 ```
 
-- [ ] **Step 3: Wire it in main**
+- [x] **Step 3: Wire it in main**
 
 In `cmd/continuum-plugin-ebooks/main.go`, in the `server.Deps{...}` literal where the server is constructed, add:
 
@@ -165,12 +165,12 @@ In `cmd/continuum-plugin-ebooks/main.go`, in the `server.Deps{...}` literal wher
 		Credentials: server.NewHostCredentialValidator(),
 ```
 
-- [ ] **Step 4: Verify the build**
+- [x] **Step 4: Verify the build**
 
 Run: `go build ./...`
 Expected: success. (If `sdkruntime.Host()` returns a type without `ValidateProfileCredential`, the SDK working tree is not on the branch carrying SDK PR #5 — check `git -C ../continuum-plugin-sdk log --oneline -1`.)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add internal/server/credential.go internal/server/server.go cmd/continuum-plugin-ebooks/main.go
@@ -185,7 +185,7 @@ git commit -m "feat(ebooks): host-backed credential validator"
 - Create: `internal/migrate/files/0034_drop_opds_token.up.sql` / `.down.sql`
 - Delete: `internal/store/opds_token.go`
 
-- [ ] **Step 1: Write the up migration**
+- [x] **Step 1: Write the up migration**
 
 Create `internal/migrate/files/0034_drop_opds_token.up.sql`:
 
@@ -195,22 +195,22 @@ Create `internal/migrate/files/0034_drop_opds_token.up.sql`:
 DROP TABLE IF EXISTS opds_token;
 ```
 
-- [ ] **Step 2: Write the down migration**
+- [x] **Step 2: Write the down migration**
 
 Create `internal/migrate/files/0034_drop_opds_token.down.sql` — recreate the table shape from `0004_opds_kosync.up.sql`. Copy the exact `CREATE TABLE opds_token (...)` statement (and its indexes) from `internal/migrate/files/0004_opds_kosync.up.sql` into this down file.
 
-- [ ] **Step 3: Delete the store file**
+- [x] **Step 3: Delete the store file**
 
 Delete `internal/store/opds_token.go`.
 
 Run: `git rm internal/store/opds_token.go`
 
-- [ ] **Step 4: Verify nothing else references it**
+- [x] **Step 4: Verify nothing else references it**
 
 Run: `grep -rn "OPDSToken\|opds_token\|GetOPDSTokenByJTI" internal/ --include=*.go`
 Expected: only matches in `internal/server/opds_kosync_routes.go` (the handlers + `opdsAuth`, rewritten in Task 4) and their tests. If other files reference it, note them for Task 4.
 
-- [ ] **Step 5: Commit** (after Task 4 — the store deletion does not build alone). Skip the commit here; Task 4 commits both together.
+- [x] **Step 5: Commit** (after Task 4 — the store deletion does not build alone). Skip the commit here; Task 4 commits both together.
 
 ---
 
@@ -221,7 +221,7 @@ Expected: only matches in `internal/server/opds_kosync_routes.go` (the handlers 
 - Modify: `internal/server/server.go` (drop opds-token routes)
 - Test: `internal/server/opds_auth_test.go` (create)
 
-- [ ] **Step 1: Rewrite `opdsAuth`**
+- [x] **Step 1: Rewrite `opdsAuth`**
 
 In `internal/server/opds_kosync_routes.go`, replace the `opdsAuth` function body. It currently does `r.BasicAuth()` → `GetOPDSTokenByJTI` → bcrypt and returns a `userID string`. Change it to return `(userID, profileID string)` and resolve via the validator:
 
@@ -251,7 +251,7 @@ func (s *Server) opdsAuth(r *http.Request) (string, string, error) {
 
 Add imports to the file if missing: `"errors"`, `"google.golang.org/grpc/codes"`, `"google.golang.org/grpc/status"`.
 
-- [ ] **Step 2: Update every `opdsAuth` call site**
+- [x] **Step 2: Update every `opdsAuth` call site**
 
 Every OPDS handler in `opds_kosync_routes.go` currently does `if s.opdsAuth(r) == "" { s.opdsChallenge(w, r); return }`. Replace each with:
 
@@ -269,11 +269,11 @@ Every OPDS handler in `opds_kosync_routes.go` currently does `if s.opdsAuth(r) =
 
 Handlers that ignore the user id (`handleOPDSRoot`, `handleOPDSCatalog`, `handleOPDSSearch`, `handleOPDSBookEntry`) keep `userID`/`profileID` only as needed — use `_` for unused returns. `handleOPDSDownload` already uses `userID`; it now also has `profileID` available (unused until Task 8). Apply Go's unused-variable rule: name only what you use.
 
-- [ ] **Step 3: Delete the OPDS-token handlers**
+- [x] **Step 3: Delete the OPDS-token handlers**
 
 In `internal/server/opds_kosync_routes.go`, delete `handleListOPDSTokens`, `handleCreateOPDSToken`, and `handleRevokeOPDSToken` entirely.
 
-- [ ] **Step 4: Drop the opds-token routes**
+- [x] **Step 4: Drop the opds-token routes**
 
 In `internal/server/server.go` (or `user_routes.go`, wherever they are mounted), remove the three route registrations:
 
@@ -285,7 +285,7 @@ r.Delete("/me/opds-tokens/{id}", s.handleRevokeOPDSToken)
 
 Run `grep -rn "opds-tokens" internal/` to find the exact lines.
 
-- [ ] **Step 5: Write the auth test**
+- [x] **Step 5: Write the auth test**
 
 Create `internal/server/opds_auth_test.go`:
 
@@ -351,12 +351,12 @@ func TestOPDSAuth_NoHeader(t *testing.T) {
 
 (If the `Server` struct or `Deps` field names differ, adjust — confirm `Server` has a `deps Deps` field; the explore confirmed `New(d Deps)` sets `deps: d`.)
 
-- [ ] **Step 6: Run tests and build**
+- [x] **Step 6: Run tests and build**
 
 Run: `go test ./internal/server/ -run TestOPDSAuth -v` and `go build ./...`
 Expected: tests PASS; build succeeds. Existing OPDS feed tests still pass (`buildOPDSCatalogFeed` is unchanged).
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add internal/migrate/files/0034_drop_opds_token.up.sql internal/migrate/files/0034_drop_opds_token.down.sql internal/store/opds_token.go internal/server/opds_kosync_routes.go internal/server/server.go internal/server/opds_auth_test.go
@@ -370,7 +370,7 @@ git commit -m "feat(ebooks): OPDS auth via ValidateProfileCredential; drop opds_
 **Files:**
 - Create: `internal/migrate/files/0032_collection_profile.up.sql` / `.down.sql`
 
-- [ ] **Step 1: Write the up migration**
+- [x] **Step 1: Write the up migration**
 
 Create `internal/migrate/files/0032_collection_profile.up.sql`:
 
@@ -392,7 +392,7 @@ CREATE INDEX smart_collection_user_idx
   ON smart_collection (user_id, profile_id, is_pinned DESC, name);
 ```
 
-- [ ] **Step 2: Write the down migration**
+- [x] **Step 2: Write the down migration**
 
 Create `internal/migrate/files/0032_collection_profile.down.sql`:
 
@@ -409,12 +409,12 @@ ALTER TABLE smart_collection DROP COLUMN IF EXISTS profile_id;
 
 (Confirm the index names against `0002_collections.up.sql` and `0017_smart_collection.up.sql` — they are `collection_user_pinned_idx` and `smart_collection_user_idx`. Adjust if different.)
 
-- [ ] **Step 3: Verify the migration applies**
+- [x] **Step 3: Verify the migration applies**
 
 Run: `go test ./internal/store/ -run TestMigrations -count=1` if such a test exists; otherwise `go test ./internal/store/ -count=1` (the test harness runs all migrations on a fresh schema — a green store package proves `0032` applies).
 Expected: PASS.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add internal/migrate/files/0032_collection_profile.up.sql internal/migrate/files/0032_collection_profile.down.sql
@@ -430,7 +430,7 @@ git commit -m "feat(ebooks): profile_id columns on collection tables"
 - Modify: `internal/store/smart_collection.go`
 - Test: `internal/store/collection_test.go`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Add to `internal/store/collection_test.go` (create the file if absent, `package store_test`, using `newTestStore`):
 
@@ -461,12 +461,12 @@ func TestCollectionsScopedByProfile(t *testing.T) {
 
 Add a `must` helper if the package lacks one: `func must(t *testing.T, err error) { t.Helper(); if err != nil { t.Fatal(err) } }`.
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `go test ./internal/store/ -run TestCollectionsScopedByProfile`
 Expected: FAIL — `Collection` has no `ProfileID`; `ListCollectionsByProfile` undefined.
 
-- [ ] **Step 3: Update `collection.go`**
+- [x] **Step 3: Update `collection.go`**
 
 In `internal/store/collection.go`:
 - Add `ProfileID string` to the `Collection` struct after `UserID string`.
@@ -510,7 +510,7 @@ func (s *Store) ListCollectionsByProfile(ctx context.Context, userID, profileID 
 
 (Match the existing `SELECT` column list / `COALESCE` usage from the current `ListCollectionsByUser` — adjust the scan if the current code differs.)
 
-- [ ] **Step 4: Update `smart_collection.go`**
+- [x] **Step 4: Update `smart_collection.go`**
 
 In `internal/store/smart_collection.go`:
 - Add `ProfileID string` to `SmartCollection`.
@@ -519,12 +519,12 @@ In `internal/store/smart_collection.go`:
 - `DeleteSmartCollection`: add `profileID`; `WHERE id=$1 AND user_id=$2 AND profile_id=$3`.
 - `GetSmartCollection` stays id-only (handler enforces ownership — see Task 7).
 
-- [ ] **Step 5: Run the test to verify it passes**
+- [x] **Step 5: Run the test to verify it passes**
 
 Run: `go test ./internal/store/ -run TestCollectionsScopedByProfile -v`
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add internal/store/collection.go internal/store/smart_collection.go internal/store/collection_test.go
@@ -539,7 +539,7 @@ git commit -m "feat(ebooks): scope collection store queries by profile"
 - Modify: `internal/server/user_routes.go`
 - Modify: `internal/server/smart_collection_handler.go`
 
-- [ ] **Step 1: Update manual-collection handlers**
+- [x] **Step 1: Update manual-collection handlers**
 
 In `internal/server/user_routes.go`, every collection handler (`handleListMyCollections`, `handleCreateCollection`, `handleUpdateCollection`, `handleDeleteCollection`, `handleListCollectionItems`, `handleAddCollectionItem`, `handleRemoveCollectionItem`) currently does `id, _ := auth.FromContext(r.Context())` and passes `id.UserID`. Change each to also pass `id.ProfileID`:
 - `handleListMyCollections`: `s.deps.Store.ListCollectionsByProfile(r.Context(), id.UserID, id.ProfileID)`.
@@ -547,7 +547,7 @@ In `internal/server/user_routes.go`, every collection handler (`handleListMyColl
 - `handleUpdateCollection`, `handleDeleteCollection`: pass `id.ProfileID` to the renamed store calls.
 - `handleListCollectionItems`, `handleAddCollectionItem`, `handleRemoveCollectionItem`: pass `id.ProfileID` to `ListItemsForUser`/`AddItemForUser`/`RemoveItemForUser`.
 
-- [ ] **Step 2: Update smart-collection handlers**
+- [x] **Step 2: Update smart-collection handlers**
 
 In `internal/server/smart_collection_handler.go`:
 - `handleListSmartCollections`: `ListSmartCollections(r.Context(), userID, profileID, 200)`.
@@ -556,17 +556,17 @@ In `internal/server/smart_collection_handler.go`:
 - `handleDeleteSmartCollection`: pass `profileID`.
 - `persistSmartCollection`: set `ProfileID: profileID` on new rows; read `profileID` from `auth.FromContext`.
 
-- [ ] **Step 3: Verify the build**
+- [x] **Step 3: Verify the build**
 
 Run: `go build ./...`
 Expected: success (the renamed store methods now have all call sites updated).
 
-- [ ] **Step 4: Run the server + store tests**
+- [x] **Step 4: Run the server + store tests**
 
 Run: `go test ./internal/server/ ./internal/store/`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add internal/server/user_routes.go internal/server/smart_collection_handler.go
@@ -581,7 +581,7 @@ git commit -m "feat(ebooks): thread profile id through collection handlers"
 - Modify: `internal/server/opds_kosync_routes.go`
 - Test: `internal/server/opds_collections_test.go` (create)
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `internal/server/opds_collections_test.go`:
 
@@ -611,12 +611,12 @@ func TestBuildOPDSCollectionsFeed(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `go test ./internal/server/ -run TestBuildOPDSCollectionsFeed`
 Expected: FAIL — `buildOPDSCollectionsFeed` undefined.
 
-- [ ] **Step 3: Implement the feed builder and routes**
+- [x] **Step 3: Implement the feed builder and routes**
 
 In `internal/server/opds_kosync_routes.go`:
 
@@ -667,12 +667,12 @@ In `handleOPDSRoot`, add a navigation link to the service document's `Links` so 
 		{Rel: "subsection", Type: "application/atom+xml;profile=opds-catalog", Href: "/opds/collections"},
 ```
 
-- [ ] **Step 4: Run the test and build**
+- [x] **Step 4: Run the test and build**
 
 Run: `go test ./internal/server/ -run TestBuildOPDSCollectionsFeed -v` and `go build ./...`
 Expected: PASS; build succeeds.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add internal/server/opds_kosync_routes.go internal/server/opds_collections_test.go
@@ -686,7 +686,7 @@ git commit -m "feat(ebooks): expose per-profile collections over OPDS"
 **Files:**
 - Create: `internal/migrate/files/0033_kosync_profile.up.sql` / `.down.sql`
 
-- [ ] **Step 1: Write the up migration**
+- [x] **Step 1: Write the up migration**
 
 Create `internal/migrate/files/0033_kosync_profile.up.sql`:
 
@@ -712,7 +712,7 @@ ALTER TABLE kosync_book_link
 
 (Confirm the constraint names against `0004_opds_kosync.up.sql`. PostgreSQL's default name for a table `t`'s primary key is `t_pkey`, so `kosync_progress_pkey` / `kosync_book_link_pkey` are correct unless the migration named them explicitly — check and adjust.)
 
-- [ ] **Step 2: Write the down migration**
+- [x] **Step 2: Write the down migration**
 
 Create `internal/migrate/files/0033_kosync_profile.down.sql`:
 
@@ -726,12 +726,12 @@ ALTER TABLE kosync_progress DROP COLUMN IF EXISTS profile_id;
 ALTER TABLE kosync_book_link DROP COLUMN IF EXISTS profile_id;
 ```
 
-- [ ] **Step 3: Verify the migration applies**
+- [x] **Step 3: Verify the migration applies**
 
 Run: `go test ./internal/store/ -count=1`
 Expected: PASS (the harness applies all migrations on a fresh schema; existing kosync store tests still pass against the new columns since the store code is updated in Task 10 — if the store package does not build yet, defer this check to Task 10 step 5).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add internal/migrate/files/0033_kosync_profile.up.sql internal/migrate/files/0033_kosync_profile.down.sql
@@ -746,7 +746,7 @@ git commit -m "feat(ebooks): profile_id columns on kosync tables"
 - Modify: `internal/store/kosync.go`
 - Test: `internal/store/kosync_test.go`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Add to `internal/store/kosync_test.go` (create if absent):
 
@@ -770,12 +770,12 @@ func TestKosyncProgressScopedByProfile(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `go test ./internal/store/ -run TestKosyncProgressScopedByProfile`
 Expected: FAIL — `KosyncProgress` has no `ProfileID`; `GetKosyncProgress` signature mismatch.
 
-- [ ] **Step 3: Update `kosync.go`**
+- [x] **Step 3: Update `kosync.go`**
 
 In `internal/store/kosync.go`:
 - Add `ProfileID string` to `KosyncUser`, `KosyncProgress`, and `KosyncBookLink`.
@@ -788,17 +788,17 @@ In `internal/store/kosync.go`:
 - `ListKosyncUsers`: add `profile_id` to the `SELECT`/scan (admin listing — no filter change).
 - `DeleteKosyncUser`: unchanged (deletes by username, which is unique).
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `go test ./internal/store/ -run TestKosyncProgressScopedByProfile -v`
 Expected: PASS.
 
-- [ ] **Step 5: Run the full store package**
+- [x] **Step 5: Run the full store package**
 
 Run: `go test ./internal/store/ -count=1`
 Expected: PASS — confirms migrations `0032`/`0033` apply and all store code builds.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add internal/store/kosync.go internal/store/kosync_test.go
@@ -812,24 +812,24 @@ git commit -m "feat(ebooks): scope kosync store by profile"
 **Files:**
 - Modify: `internal/server/opds_kosync_routes.go`
 
-- [ ] **Step 1: Retire the public registration endpoint**
+- [x] **Step 1: Retire the public registration endpoint**
 
 In `mountKosync`, remove the `POST /users/create` route. KOReader registration is portal-only now. Delete the public-path branch of `handleKosyncCreate` (the `id.UserID == ""` synthetic-account branch); keep only the authenticated path. Rename the function to reflect it is the authenticated handler (it is already reached via `handleKosyncRegister` for `/api/v1/me/kosync/register`).
 
-- [ ] **Step 2: Make registration profile-aware**
+- [x] **Step 2: Make registration profile-aware**
 
 In the authenticated kosync registration handler, the identity now carries `(UserID, ProfileID)` and the host injects `X-Continuum-User-Name` / `X-Continuum-Profile-Name`. Compute the kosync username as the `user#profile` string — `username` for the primary profile (`ProfileID == ""`), `username#profileName` otherwise — read from the request headers `X-Continuum-User-Name` and `X-Continuum-Profile-Name`. Store the `KosyncUser` with `UserID`, `ProfileID`, and that computed `KosyncUsername`. The kosync password handling (sha1 → bcrypt) is unchanged.
 
-- [ ] **Step 3: Make auth and progress profile-aware**
+- [x] **Step 3: Make auth and progress profile-aware**
 
 In `kosyncAuthHeader`, after `GetKosyncUserByUsername` resolves the row, it now yields `(UserID, ProfileID)` directly from the row — no `#` parsing needed, the username lookup is self-identifying. `handleKosyncGetProgress` / `handleKosyncPutProgress` pass `u.ProfileID` through to `GetKosyncProgress` / `UpsertKosyncProgress`. The kosync `document` book-link handler passes `ProfileID` to `UpsertKosyncBookLink` / `FindKosyncBookLinkByBook`.
 
-- [ ] **Step 4: Verify the build and tests**
+- [x] **Step 4: Verify the build and tests**
 
 Run: `go build ./...` and `go test ./internal/server/ ./internal/store/`
 Expected: build succeeds; tests pass. Update any existing kosync handler test that posted to `/kosync/users/create` — point it at the authenticated `/api/v1/me/kosync/register` path, or remove it if it specifically tested the retired public path.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add internal/server/opds_kosync_routes.go
@@ -847,7 +847,7 @@ git commit -m "feat(ebooks): profile-aware kosync, portal-only registration"
 
 Note: the explore confirmed `ApplyContentRestriction` is defined but never called — no catalog/search/OPDS handler applies a restriction filter. Removal is therefore pure deletion; there are no filter call sites to unwire.
 
-- [ ] **Step 1: Write the drop migration**
+- [x] **Step 1: Write the drop migration**
 
 Create `internal/migrate/files/0035_drop_content_restriction.up.sql`:
 
@@ -858,27 +858,27 @@ DROP TABLE IF EXISTS content_restriction;
 
 Create `0035_drop_content_restriction.down.sql` — copy the exact `CREATE TABLE content_restriction (...)` from `internal/migrate/files/0019_content_restriction.up.sql`.
 
-- [ ] **Step 2: Delete the store and server files**
+- [x] **Step 2: Delete the store and server files**
 
 ```bash
 git rm internal/store/content_restriction.go internal/server/content_restriction.go
 ```
 
-- [ ] **Step 3: Remove the route mount**
+- [x] **Step 3: Remove the route mount**
 
 In `internal/server/server.go`, remove the line `s.mountContentRestrictionRoutes(r)`.
 
-- [ ] **Step 4: Confirm no dangling references**
+- [x] **Step 4: Confirm no dangling references**
 
 Run: `grep -rn "ContentRestriction\|content_restriction\|content-restriction" internal/ --include=*.go`
 Expected: no matches. If any remain (e.g. an admin-routes reference), delete them.
 
-- [ ] **Step 5: Build and test**
+- [x] **Step 5: Build and test**
 
 Run: `go build ./...` and `go test ./internal/server/ ./internal/store/ -count=1`
 Expected: build succeeds; tests pass (drop the content-restriction store/server tests as part of the file deletions).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add -A internal/migrate/files/0035_drop_content_restriction.up.sql internal/migrate/files/0035_drop_content_restriction.down.sql internal/store/content_restriction.go internal/server/content_restriction.go internal/server/server.go
@@ -893,20 +893,20 @@ git commit -m "feat(ebooks): remove content restriction"
 - Modify: `web/src/pages/Apps.tsx`
 - Modify: `web/src/lib/api.ts`
 
-- [ ] **Step 1: Remove the OPDS section**
+- [x] **Step 1: Remove the OPDS section**
 
 In `web/src/pages/Apps.tsx`, delete the `OPDSSection` component entirely and remove its render from the page body. Keep `KOReaderSection` — kosync stays. Remove the now-unused imports (`listOPDSTokens`, `createOPDSToken`, `revokeOPDSToken`).
 
-- [ ] **Step 2: Remove the API functions**
+- [x] **Step 2: Remove the API functions**
 
 In `web/src/lib/api.ts`, delete the `OPDSToken` type and the `listOPDSTokens`, `createOPDSToken`, `revokeOPDSToken` functions.
 
-- [ ] **Step 3: Verify the build**
+- [x] **Step 3: Verify the build**
 
 Run: `cd web && pnpm build`
 Expected: `tsc -b` + Vite build succeed with no unused-symbol or missing-import errors.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add web/src/pages/Apps.tsx web/src/lib/api.ts
@@ -922,26 +922,26 @@ git commit -m "feat(ebooks): remove OPDS token management UI"
 - Modify: `web/src/pages/Admin.tsx`
 - Modify: `web/src/lib/api.ts`
 
-- [ ] **Step 1: Delete the admin page**
+- [x] **Step 1: Delete the admin page**
 
 ```bash
 git rm web/src/pages/admin/ContentRestrictions.tsx
 ```
 
-- [ ] **Step 2: Remove the tab**
+- [x] **Step 2: Remove the tab**
 
 In `web/src/pages/Admin.tsx`, remove the `ContentRestrictionsTab` import and the `<TabsContent value="restrictions">...</TabsContent>` block, plus the matching `<TabsTrigger>` for that tab.
 
-- [ ] **Step 3: Remove the API functions**
+- [x] **Step 3: Remove the API functions**
 
 In `web/src/lib/api.ts`, delete the `ContentRestriction` type and the `listContentRestrictions`, `putContentRestriction`, `deleteContentRestriction` functions.
 
-- [ ] **Step 4: Verify the build**
+- [x] **Step 4: Verify the build**
 
 Run: `cd web && pnpm build`
 Expected: build succeeds.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A web/src/pages/admin/ContentRestrictions.tsx web/src/pages/Admin.tsx web/src/lib/api.ts
@@ -954,26 +954,26 @@ git commit -m "feat(ebooks): remove content-restriction admin UI"
 
 **Files:** none (verification only)
 
-- [ ] **Step 1: Backend — build, vet, test**
+- [x] **Step 1: Backend — build, vet, test**
 
 Run: `go build ./... && go vet ./internal/... && go test ./internal/... -count=1`
 Expected: PASS for every package.
 
-- [ ] **Step 2: Frontend — build**
+- [x] **Step 2: Frontend — build**
 
 Run: `cd web && pnpm build`
 Expected: build succeeds.
 
-- [ ] **Step 3: Frontend — unit tests**
+- [x] **Step 3: Frontend — unit tests**
 
 Run: `cd web && pnpm test` (if `vitest` has suites; skip if none).
 Expected: PASS.
 
-- [ ] **Step 4: Manual smoke check (optional but recommended)**
+- [x] **Step 4: Manual smoke check (optional but recommended)**
 
 Deploy with `/opt/continuum_plugins/install-plugin.sh continuum-plugin-ebooks` and verify in a browser: an OPDS reader authenticates with `user` / `user#profile` + the continuum password; a profile's collections show only that profile's collections in the SPA and over `/opds/collections`; the Apps page no longer shows OPDS tokens; the admin area no longer shows content restrictions.
 
-- [ ] **Step 5: Final commit (only if step 4 surfaced fixes)**
+- [x] **Step 5: Final commit (only if step 4 surfaced fixes)**
 
 ```bash
 git add -A
