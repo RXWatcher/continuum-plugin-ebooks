@@ -9,7 +9,7 @@ function apiBase(): string {
   return m ? m[1] : "";
 }
 
-// Continuum's plugin proxy authenticates each request via a Bearer token
+// Silo's plugin proxy authenticates each request via a Bearer token
 // (Authorization header) or ?token= query param. The SPA receives the token
 // on its initial load via URL ?token= (set by the sidebar link click). We
 // capture it once into memory for use on all subsequent fetches.
@@ -23,11 +23,11 @@ let refreshPromise: Promise<string | null> | null = null;
     cachedToken = t;
     params.delete("token");
   }
-  const th = params.get("theme") ?? sessionStorage.getItem("continuum-theme");
+  const th = params.get("theme") ?? sessionStorage.getItem("silo-theme");
   if (th) {
     cachedTheme = th;
     try {
-      sessionStorage.setItem("continuum-theme", th);
+      sessionStorage.setItem("silo-theme", th);
     } catch {
       /* private mode */
     }

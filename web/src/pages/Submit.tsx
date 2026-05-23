@@ -138,7 +138,7 @@ export default function Submit() {
           </select>
         </div>
         {selectedProvider?.plugin_id ===
-          "continuum.ebook-requests" && (
+          "silo.ebook-requests" && (
           <Field
             label="Anna's Archive source ID"
             value={sourceID}

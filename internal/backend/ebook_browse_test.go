@@ -7,10 +7,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/RXWatcher/continuum-plugin-ebooks/internal/backend"
+	"github.com/RXWatcher/silo-plugin-ebooks/internal/backend"
 )
 
-// fakeHost stands up an httptest.Server that mimics the continuum host's
+// fakeHost stands up an httptest.Server that mimics the silo host's
 // plugin-proxy ("GET /api/v1/plugins/<id>/<plugin-path>"). The browse tests
 // configure the handler to return either the happy-path payload, a 404 (to
 // exercise the ebookdb graceful-degrade path), or a 500.

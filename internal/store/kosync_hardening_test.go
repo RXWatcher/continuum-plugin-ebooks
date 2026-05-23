@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/RXWatcher/continuum-plugin-ebooks/internal/store"
+	"github.com/RXWatcher/silo-plugin-ebooks/internal/store"
 )
 
 // Regression: the public KOReader /kosync/users/create path uses
@@ -56,7 +56,7 @@ func TestCreateKosyncUserStrict_NoOverwrite_And_Isolated(t *testing.T) {
 	// The authenticated path (UpsertKosyncUser, owner-scoped) still lets the
 	// real owner rotate, but a different owner cannot hijack the username.
 	if err := s.UpsertKosyncUser(ctx, store.KosyncUser{
-		UserID: "continuum-99", KosyncUsername: "alice", KosyncPasswordHash: "HIJACK",
+		UserID: "silo-99", KosyncUsername: "alice", KosyncPasswordHash: "HIJACK",
 	}); !errors.Is(err, store.ErrKosyncUsernameTaken) {
 		t.Fatalf("cross-owner upsert should be rejected, got %v", err)
 	}

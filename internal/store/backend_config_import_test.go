@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/RXWatcher/continuum-plugin-ebooks/internal/store"
+	"github.com/RXWatcher/silo-plugin-ebooks/internal/store"
 )
 
 func TestImportLegacyConfigOnlyWhenDefault(t *testing.T) {
@@ -12,7 +12,7 @@ func TestImportLegacyConfigOnlyWhenDefault(t *testing.T) {
 	ctx := context.Background()
 
 	legacy := store.Config{
-		TargetBackendPluginID:    "continuum.local-ebooks",
+		TargetBackendPluginID:    "silo.local-ebooks",
 		TargetBackendInstallID:   "42",
 		AutoApproveRequests:      true,
 		DefaultStreamingMode:     "cache",
@@ -58,7 +58,7 @@ func TestImportLegacyConfigOnlyWhenDefault(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.CacheDir != "/var/cache/ebooks" || cfg.TargetBackendPluginID != "continuum.local-ebooks" {
+	if cfg.CacheDir != "/var/cache/ebooks" || cfg.TargetBackendPluginID != "silo.local-ebooks" {
 		t.Fatalf("config was overwritten: %+v", cfg)
 	}
 }

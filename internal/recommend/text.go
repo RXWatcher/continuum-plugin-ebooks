@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/RXWatcher/continuum-plugin-ebooks/internal/backend"
+	"github.com/RXWatcher/silo-plugin-ebooks/internal/backend"
 )
 
 const maxOverviewRunes = 1000

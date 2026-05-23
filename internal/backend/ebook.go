@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"net/url"
 
-	"github.com/RXWatcher/continuum-plugin-ebooks/internal/mediatoken"
+	"github.com/RXWatcher/silo-plugin-ebooks/internal/mediatoken"
 )
 
 // Capabilities mirrors the backend /capabilities response shape.

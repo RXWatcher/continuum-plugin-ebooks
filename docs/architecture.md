@@ -3,17 +3,17 @@
 The portal is a **stateless front door**. It owns user state (progress,
 annotations, requests, reader sync, OPDS tokens, send queues) but it never
 owns catalog data or ebook files. Catalog and bytes always come from an
-upstream backend plugin reachable through the Continuum host proxy.
+upstream backend plugin reachable through the Silo host proxy.
 
 ```
                                         ┌─────────────────────────────┐
-   browser / reader app                 │  continuum host             │
+   browser / reader app                 │  silo host             │
    ──────────────────────►              │  /api/v1/plugins/<id>/...   │
    /opds /kosync /kobo /api/v1          │  (auth + proxy)             │
                                         └────────────┬────────────────┘
                                                      │
               ┌──────────────────────────┐           ▼
-              │ continuum.ebooks         │   ┌─────────────────────────┐
+              │ silo.ebooks         │   ┌─────────────────────────┐
               │ (this plugin)            │──►│ ebook backend plugin    │
               │  HTTP + scheduler        │   │  bookwarehouse-ebook    │
               │  Postgres (ebooks schema)│   │  ebook-requests         │
@@ -56,14 +56,14 @@ Every call to a backend goes through the host proxy:
 
 ```
 GET http://localhost:8080/api/v1/plugins/<install_id_or_plugin_id>/api/v1/...
-Authorization: Bearer <CONTINUUM_PLUGIN_TOKEN>
+Authorization: Bearer <SILO_PLUGIN_TOKEN>
 ```
 
 Code path: [`internal/backend/client.go::HostHTTPClient.do`](../internal/backend/client.go).
 
 The portal **does not** call backend plugins directly over their gRPC
-sockets. The host token is set via `CONTINUUM_PLUGIN_TOKEN`; the base URL is
-`CONTINUUM_HOST_BASE_URL` (defaults to `http://localhost:8080`).
+sockets. The host token is set via `SILO_PLUGIN_TOKEN`; the base URL is
+`SILO_HOST_BASE_URL` (defaults to `http://localhost:8080`).
 
 `validInstallID` rejects anything outside `[A-Za-z0-9._-]` to defend against
 path traversal in install-id values that came out of config/DB. Redirects
@@ -73,7 +73,7 @@ can't point the host bearer at an arbitrary URL.
 ### CallPluginHTTP vs HTTP proxy
 
 The SDK exposes a runtime-host RPC (`CallPluginHTTP`) but the current
-Continuum host does **not** implement it — wiring it makes every backend
+Silo host does **not** implement it — wiring it makes every backend
 call fail with `code = Unimplemented`. `main.go` therefore leaves
 `runtimeHost` nil and uses the HTTP proxy. Don't re-enable it without
 verifying host support.
@@ -120,7 +120,7 @@ a second HTTP server with the same handler on first Configure. Intended
 for reverse proxying `ebooks.example.com` directly at the OPDS / kosync /
 Kobo surfaces without going through the host's path-prefixed proxy. The
 listener is bound **once**; changing the value requires a plugin restart
-(a warning is logged). See `cmd/continuum-plugin-ebooks/main.go`.
+(a warning is logged). See `cmd/silo-plugin-ebooks/main.go`.
 
 ## Process model
 

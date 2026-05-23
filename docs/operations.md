@@ -8,7 +8,7 @@ selection, secrets, day‑2. End-user docs live in
 
 1. Install at least one backend plugin (bookwarehouse-ebook,
    ebook-requests, or local-ebooks) and finish its own setup.
-2. Install `continuum.ebooks`. Set `database_url` (see below).
+2. Install `silo.ebooks`. Set `database_url` (see below).
 3. Open **Admin → Ebooks → Backend** and pick a default backend (or set
    per-shelf libraries — see [Backend selection](#backend-selection)).
 4. Optional: per-media-type routing rules at
@@ -34,14 +34,14 @@ Operators typically run:
 ```sql
 CREATE ROLE plugin_ebooks LOGIN PASSWORD '...';
 CREATE SCHEMA ebooks AUTHORIZATION plugin_ebooks;
-GRANT CONNECT ON DATABASE continuum TO plugin_ebooks;
+GRANT CONNECT ON DATABASE silo TO plugin_ebooks;
 -- migrations run as plugin_ebooks; CREATE TABLE inside the owned schema works
 ```
 
 DSN:
 
 ```text
-postgres://plugin_ebooks:password@postgres:5432/continuum?search_path=ebooks&sslmode=disable
+postgres://plugin_ebooks:password@postgres:5432/silo?search_path=ebooks&sslmode=disable
 ```
 
 `search_path=ebooks` is what makes all tables land in the `ebooks`
@@ -142,7 +142,7 @@ reader apps:
 
 ```
 ebooks.example.com → reverse proxy → :5051 → /opds/, /kosync/, /kobo/...
-app.example.com    → continuum host       → /api/v1/plugins/<id>/...
+app.example.com    → silo host       → /api/v1/plugins/<id>/...
 ```
 
 The listener is bound **once** on first Configure. Changing the value

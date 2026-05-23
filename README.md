@@ -1,6 +1,6 @@
-# Ebooks Portal for Continuum
+# Ebooks Portal for Silo
 
-`continuum.ebooks` is the customer-facing ebooks portal. It serves the reader SPA, OPDS feed, KOReader/Kobo/Kindle integrations, and routes ebook requests to the configured backend provider (BookWarehouse, local libraries, or external downloader).
+`silo.ebooks` is the customer-facing ebooks portal. It serves the reader SPA, OPDS feed, KOReader/Kobo/Kindle integrations, and routes ebook requests to the configured backend provider (BookWarehouse, local libraries, or external downloader).
 
 ## Category
 
@@ -11,7 +11,7 @@ Lives under **Books/Ebooks**.
 | Type | ID | Purpose |
 | --- | --- | --- |
 | `http_routes.v1` | `spa` | Customer-facing portal: reader SPA, OPDS, KOReader kosync, Kobo Sync, Kindle send, and admin UI. |
-| `event_consumer.v1` | `request_watcher` | Watches request lifecycle events from `continuum.ebook-requests` and `continuum.bookwarehouse-ebook` and updates the portal request table. |
+| `event_consumer.v1` | `request_watcher` | Watches request lifecycle events from `silo.ebook-requests` and `silo.bookwarehouse-ebook` and updates the portal request table. |
 | `scheduled_task.v1` | `request_reconciler` | Polls backends every minute for missed request events and reconciles stale rows. |
 | `scheduled_task.v1` | `cache_evictor` | LRU-evicts cached ebook files every 5 minutes to keep the on-disk cache under budget. |
 | `scheduled_task.v1` | `kobo_session_reaper` | Expires stale Kobo Sync transfer sessions every 5 minutes. |
@@ -25,13 +25,13 @@ Lives under **Books/Ebooks**.
 
 The portal does not own catalog or file storage. It consumes status events from backend plugins and forwards requests through the `ebooks` request router capability.
 
-- [`continuum-plugin-bookwarehouse-ebook`](https://github.com/RXWatcher/continuum-plugin-bookwarehouse-ebook) — BookWarehouse/Calibre backend; emits `request_acknowledged`, `request_failed`, `request_status_changed`, `request_fulfilled`.
-- [`continuum-plugin-ebook-requests`](https://github.com/RXWatcher/continuum-plugin-ebook-requests) — Anna's-Archive-style request provider; emits the same lifecycle events.
-- [`continuum-plugin-local-ebooks`](https://github.com/RXWatcher/continuum-plugin-local-ebooks) — local filesystem backend (optional alternative source provider).
+- [`silo-plugin-bookwarehouse-ebook`](https://github.com/RXWatcher/silo-plugin-bookwarehouse-ebook) — BookWarehouse/Calibre backend; emits `request_acknowledged`, `request_failed`, `request_status_changed`, `request_fulfilled`.
+- [`silo-plugin-ebook-requests`](https://github.com/RXWatcher/silo-plugin-ebook-requests) — Anna's-Archive-style request provider; emits the same lifecycle events.
+- [`silo-plugin-local-ebooks`](https://github.com/RXWatcher/silo-plugin-local-ebooks) — local filesystem backend (optional alternative source provider).
 
 At least one backend must be installed and selected as the request target before the portal can fulfil requests.
 
-Host app: [`ContinuumApp/continuum`](https://github.com/ContinuumApp/continuum). SDK: [`ContinuumApp/continuum-plugin-sdk`](https://github.com/ContinuumApp/continuum-plugin-sdk).
+Host app: [`ContinuumApp/silo`](https://github.com/ContinuumApp/silo). SDK: [`ContinuumApp/continuum-plugin-sdk`](https://github.com/ContinuumApp/continuum-plugin-sdk).
 
 ## External services
 
@@ -39,7 +39,7 @@ Host app: [`ContinuumApp/continuum`](https://github.com/ContinuumApp/continuum).
 - **Kobo Sync API** — outbound Kobo device protocol terminated locally; no upstream Kobo dependency.
 - **Kindle send** — outbound SMTP delivery to a user's `@kindle.com` address (configured per-installation via `kindle_smtp_config`).
 - **Embedding service** (optional) — used by the similar-books recommender when `EMBEDDING_BASE_URL` / `EMBEDDING_MODEL` are set; otherwise the similar endpoint returns empty results.
-- **Host HTTP API** — backend proxy calls go through the host at `CONTINUUM_HOST_BASE_URL` using `CONTINUUM_PLUGIN_TOKEN`.
+- **Host HTTP API** — backend proxy calls go through the host at `SILO_HOST_BASE_URL` using `SILO_PLUGIN_TOKEN`.
 
 ## Reader integrations
 
@@ -72,21 +72,21 @@ An optional `standalone_http_listen` direct listener lets the OPDS/Kobo/KOReader
 Example DSN:
 
 ```text
-postgres://plugin_ebooks:password@postgres:5432/continuum?search_path=ebooks&sslmode=disable
+postgres://plugin_ebooks:password@postgres:5432/silo?search_path=ebooks&sslmode=disable
 ```
 
 ## Event subscriptions
 
 The `request_watcher` consumer subscribes to lifecycle events from both supported backends:
 
-- `plugin.continuum.ebook-requests.request_acknowledged`
-- `plugin.continuum.ebook-requests.request_failed`
-- `plugin.continuum.ebook-requests.request_status_changed`
-- `plugin.continuum.ebook-requests.request_fulfilled`
-- `plugin.continuum.bookwarehouse-ebook.request_acknowledged`
-- `plugin.continuum.bookwarehouse-ebook.request_failed`
-- `plugin.continuum.bookwarehouse-ebook.request_status_changed`
-- `plugin.continuum.bookwarehouse-ebook.request_fulfilled`
+- `plugin.silo.ebook-requests.request_acknowledged`
+- `plugin.silo.ebook-requests.request_failed`
+- `plugin.silo.ebook-requests.request_status_changed`
+- `plugin.silo.ebook-requests.request_fulfilled`
+- `plugin.silo.bookwarehouse-ebook.request_acknowledged`
+- `plugin.silo.bookwarehouse-ebook.request_failed`
+- `plugin.silo.bookwarehouse-ebook.request_status_changed`
+- `plugin.silo.bookwarehouse-ebook.request_fulfilled`
 
 The `request_reconciler` scheduled task polls the same backends to recover state for events that were missed (e.g. during portal restart).
 
@@ -109,4 +109,4 @@ make build   # builds the web SPA (pnpm) then the Go binary
 make test    # go test ./...
 ```
 
-CI builds linux-amd64 binaries on push to main via the reusable workflow in [RXWatcher/continuum-plugin-repository](https://github.com/RXWatcher/continuum-plugin-repository) and publishes them to the catalog at [`./binaries/`](https://github.com/RXWatcher/continuum-plugin-repository/tree/main/binaries).
+CI builds linux-amd64 binaries on push to main via the reusable workflow in [RXWatcher/silo-plugin-repository](https://github.com/RXWatcher/silo-plugin-repository) and publishes them to the catalog at [`./binaries/`](https://github.com/RXWatcher/silo-plugin-repository/tree/main/binaries).

@@ -56,7 +56,7 @@ func Lookup(ctx context.Context, word, lang string) (LookupResult, error) {
 	if err != nil {
 		return LookupResult{}, fmt.Errorf("new request: %w", err)
 	}
-	req.Header.Set("User-Agent", "continuum-ebooks/dictionary (+https://continuumapp.com)")
+	req.Header.Set("User-Agent", "silo-ebooks/dictionary (+https://siloapp.com)")
 	req.Header.Set("Accept", "application/json")
 	resp, err := client.Do(req)
 	if err != nil {

@@ -1,0 +1,167 @@
+{
+  "plugin_id": "silo.ebooks",
+  "version": "1.0.4",
+  "checksum": "2d40cf3f8869e72a78ca02aed11efdf2ff38c302bd9801df218f90c91a4ad13a",
+  "silo_api_version": "v1",
+  "category": "Books/Ebooks",
+  "supported_platforms": [
+    {
+      "os": "linux",
+      "arch": "amd64"
+    }
+  ],
+  "capabilities": [
+    {
+      "type": "http_routes.v1",
+      "id": "spa",
+      "display_name": "Ebooks portal",
+      "description": "Customer-facing ebooks portal: SPA + OPDS + KOReader kosync + Kobo + Kindle send + admin."
+    },
+    {
+      "type": "event_consumer.v1",
+      "id": "request_watcher",
+      "display_name": "Watch backend request events",
+      "subscriptions": [
+        "plugin.silo.ebook-requests.request_acknowledged",
+        "plugin.silo.ebook-requests.request_failed",
+        "plugin.silo.ebook-requests.request_status_changed",
+        "plugin.silo.ebook-requests.request_fulfilled",
+        "plugin.silo.bookwarehouse-ebook.request_acknowledged",
+        "plugin.silo.bookwarehouse-ebook.request_failed",
+        "plugin.silo.bookwarehouse-ebook.request_status_changed",
+        "plugin.silo.bookwarehouse-ebook.request_fulfilled"
+      ],
+      "description": "Watches request lifecycle events from the configured ebook backends and updates the portal request table."
+    },
+    {
+      "type": "scheduled_task.v1",
+      "id": "request_reconciler",
+      "display_name": "Reconcile ebook requests",
+      "cron": "*/1 * * * *",
+      "description": "Polls backends for missed request events and reconciles stale request rows."
+    },
+    {
+      "type": "scheduled_task.v1",
+      "id": "cache_evictor",
+      "display_name": "Evict LRU cached ebook files",
+      "cron": "*/5 * * * *",
+      "description": "LRU-evicts cached ebook files to keep the on-disk download cache under its size budget."
+    },
+    {
+      "type": "scheduled_task.v1",
+      "id": "kobo_session_reaper",
+      "display_name": "Expire stale Kobo transfer sessions",
+      "cron": "*/5 * * * *",
+      "description": "Expires Kobo Sync transfer sessions that have gone stale."
+    },
+    {
+      "type": "scheduled_task.v1",
+      "id": "kindle_send_retrier",
+      "display_name": "Retry queued Kindle sends",
+      "cron": "*/2 * * * *",
+      "description": "Retries queued Kindle send-to-device deliveries that previously failed."
+    },
+    {
+      "type": "scheduled_task.v1",
+      "id": "portal_library_sync",
+      "display_name": "Sync presentation libraries from backend",
+      "cron": "0 * * * *",
+      "description": "Mirrors backend libraries into the portal presentation DB on a schedule."
+    },
+    {
+      "type": "scheduled_task.v1",
+      "id": "purge_expired",
+      "display_name": "Purge expired share links + recommendation cache",
+      "description": "Drops share_link rows past their expires_at and ebook_recommendation_cache rows past their TTL. Idempotent.",
+      "cron": "0 */6 * * *"
+    },
+    {
+      "type": "request_router.v1",
+      "id": "ebooks",
+      "display_name": "Route ebook requests",
+      "description": "Forwards ebook requests to the configured request provider (bookwarehouse-ebook for owned-library; ebook-requests for downloader-style)."
+    }
+  ],
+  "http_routes": [
+    {
+      "id": "assets",
+      "method": "GET",
+      "path": "/assets/*",
+      "access": "public"
+    },
+    {
+      "id": "admin_assets",
+      "method": "GET",
+      "path": "/admin/assets/*",
+      "access": "public"
+    },
+    {
+      "id": "index",
+      "method": "GET",
+      "path": "/",
+      "access": "public"
+    },
+    {
+      "id": "opds",
+      "method": "*",
+      "path": "/opds/*",
+      "access": "public"
+    },
+    {
+      "id": "kosync",
+      "method": "*",
+      "path": "/kosync/*",
+      "access": "public"
+    },
+    {
+      "id": "kobo",
+      "method": "*",
+      "path": "/kobo/*",
+      "access": "public"
+    },
+    {
+      "id": "api",
+      "method": "*",
+      "path": "/api/v1/*",
+      "access": "authenticated"
+    },
+    {
+      "id": "admin",
+      "method": "GET",
+      "path": "/admin/*",
+      "access": "admin",
+      "navigable": true,
+      "navigation_label": "Ebooks",
+      "navigation_kind": "admin"
+    },
+    {
+      "id": "app",
+      "method": "GET",
+      "path": "/*",
+      "access": "authenticated",
+      "navigable": true,
+      "navigation_label": "Ebooks",
+      "navigation_kind": "user"
+    }
+  ],
+  "global_config_schema": [
+    {
+      "key": "database_url",
+      "title": "Postgres connection string",
+      "description": "DSN for the dedicated ebooks schema.",
+      "json_schema": "{\"type\":\"object\",\"properties\":{\"value\":{\"type\":\"string\"}},\"required\":[\"value\"]}",
+      "required": true,
+      "admin_form": {
+        "fields": [
+          {
+            "key": "value",
+            "label": "Connection URL",
+            "control": "ADMIN_FORM_CONTROL_PASSWORD",
+            "required": true,
+            "secret": true
+          }
+        ]
+      }
+    }
+  ]
+}

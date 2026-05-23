@@ -12,7 +12,7 @@ import (
 	"strings"
 	"sync"
 
-	pluginv1 "github.com/ContinuumApp/continuum-plugin-sdk/pkg/pluginproto/continuum/plugin/v1"
+	pluginv1 "github.com/ContinuumApp/continuum-plugin-sdk/pkg/pluginproto/silo/plugin/v1"
 	"github.com/ContinuumApp/continuum-plugin-sdk/pkg/pluginsdk/runtimedefault"
 )
 
@@ -82,7 +82,7 @@ func (s *Server) Configure(_ context.Context, req *pluginv1.ConfigureRequest) (*
 		CacheDownloadConcurrency: 4,
 		DefaultStreamingMode:     "proxy",
 		KepubifyPath:             "/usr/local/bin/kepubify",
-		OpdsRealm:                "Continuum Library",
+		OpdsRealm:                "Silo Library",
 	}
 	for _, e := range req.GetConfig() {
 		v := e.GetValue()

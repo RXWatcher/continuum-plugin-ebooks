@@ -8,8 +8,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/RXWatcher/continuum-plugin-ebooks/internal/auth"
-	"github.com/RXWatcher/continuum-plugin-ebooks/internal/store"
+	"github.com/RXWatcher/silo-plugin-ebooks/internal/auth"
+	"github.com/RXWatcher/silo-plugin-ebooks/internal/store"
 )
 
 // Per-user yearly reading goals for the ebook plugin. Books-count

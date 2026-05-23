@@ -45,7 +45,7 @@ Code in `handleCreateOPDSToken`:
 4. Returns the **plaintext JTI** in the response. Once only.
 
 The reader app then sends every OPDS request with HTTP Basic where:
-- `username` = continuum user id
+- `username` = silo user id
 - `password` = the JTI (the value `jti_shown_once`)
 
 ### Auth on every request
@@ -93,7 +93,7 @@ return `ErrNotFound`. The reader app should re-issue.
 | `GET /opds/book/{id}/download/{format}` | Streams the file from the backend (proxy semantics — no caching). |
 
 The realm shown on the WWW-Authenticate challenge comes from
-`backend_config.opds_realm` (default `Continuum Library`).
+`backend_config.opds_realm` (default `Silo Library`).
 
 ### OPDS pitfalls
 
@@ -136,8 +136,8 @@ Two entry points to `handleKosyncCreate`:
    `CreateKosyncUserStrict` is `INSERT … ON CONFLICT DO NOTHING` and
    returns `ErrKosyncUsernameTaken` on duplicate.
 2. **Authenticated** `POST /api/v1/me/kosync/register` — used by the
-   SPA when a logged-in continuum user wants to link KOReader. The
-   row is keyed by the continuum user id, and `UpsertKosyncUser` allows
+   SPA when a logged-in silo user wants to link KOReader. The
+   row is keyed by the silo user id, and `UpsertKosyncUser` allows
    the **owner only** to rotate the password. Cross-user takeover is
    prevented by an owner-scoped `DO UPDATE` clause.
 
@@ -165,15 +165,15 @@ their user via the JSON payload.
 
 A separate table `(document, user_id) → (book_id, format)` exists so
 the SPA can show the kosync progress next to the corresponding book in
-the continuum catalog. Populated by
+the silo catalog. Populated by
 `POST /api/v1/me/books/{id}/kosync-link` once the user has read a
 chapter in KOReader.
 
 ### Kosync pitfalls
 
 - A user who registered via the public `/kosync/users/create` and then
-  later logs into continuum will see "Not registered" on the SPA's
-  KOReader page — the SPA only finds rows keyed by the continuum user
+  later logs into silo will see "Not registered" on the SPA's
+  KOReader page — the SPA only finds rows keyed by the silo user
   id. They need to register again from the SPA. We don't merge
   synthetic accounts.
 - KOReader's "Use HTTP" toggle is required when reverse-proxying without

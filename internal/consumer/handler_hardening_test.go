@@ -10,10 +10,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"google.golang.org/protobuf/types/known/structpb"
 
-	pluginv1 "github.com/ContinuumApp/continuum-plugin-sdk/pkg/pluginproto/continuum/plugin/v1"
+	pluginv1 "github.com/ContinuumApp/continuum-plugin-sdk/pkg/pluginproto/silo/plugin/v1"
 
-	"github.com/RXWatcher/continuum-plugin-ebooks/internal/migrate"
-	"github.com/RXWatcher/continuum-plugin-ebooks/internal/store"
+	"github.com/RXWatcher/silo-plugin-ebooks/internal/migrate"
+	"github.com/RXWatcher/silo-plugin-ebooks/internal/store"
 )
 
 func newConsumerStore(t *testing.T) *store.Store {
@@ -60,7 +60,7 @@ func TestHandleEvent_ForeignRequestIDAcked(t *testing.T) {
 		"fulfilled_book_id": "bk-9",
 	})
 	resp, err := h.HandleEvent(context.Background(), &pluginv1.HandleEventRequest{
-		EventName: "plugin.continuum.bookwarehouse-ebook.request_fulfilled",
+		EventName: "plugin.silo.bookwarehouse-ebook.request_fulfilled",
 		Payload:   payload,
 	})
 	if err != nil {
@@ -78,7 +78,7 @@ func TestHandleEvent_NilDepsFnNacks(t *testing.T) {
 		"external_id": "ext-1",
 	})
 	resp, err := h.HandleEvent(context.Background(), &pluginv1.HandleEventRequest{
-		EventName: "plugin.continuum.bookwarehouse-ebook.request_acknowledged",
+		EventName: "plugin.silo.bookwarehouse-ebook.request_acknowledged",
 		Payload:   payload,
 	})
 	if err == nil {

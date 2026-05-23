@@ -8,9 +8,9 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/RXWatcher/continuum-plugin-ebooks/internal/backend"
-	"github.com/RXWatcher/continuum-plugin-ebooks/internal/libsync"
-	"github.com/RXWatcher/continuum-plugin-ebooks/internal/store"
+	"github.com/RXWatcher/silo-plugin-ebooks/internal/backend"
+	"github.com/RXWatcher/silo-plugin-ebooks/internal/libsync"
+	"github.com/RXWatcher/silo-plugin-ebooks/internal/store"
 )
 
 func (s *Server) mountAdminRoutes(r chi.Router) {

@@ -72,10 +72,10 @@ func (s *Sender) Send(ctx context.Context, to, subject, attachmentPath, attachme
 	// handler's validateKindleAddress check.
 	m.SetAddressHeader("To", to, "")
 	if subject == "" {
-		subject = "Your Continuum ebook"
+		subject = "Your Silo ebook"
 	}
 	m.SetHeader("Subject", subject)
-	m.SetBody("text/plain", "Sent from Continuum.")
+	m.SetBody("text/plain", "Sent from Silo.")
 	if attachmentPath != "" {
 		opts := []gomail.FileSetting{}
 		if attachmentName != "" {

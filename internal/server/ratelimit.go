@@ -20,7 +20,7 @@ import (
 //     in production, or the client directly in standalone-listener mode).
 //   - If X-Forwarded-For is set, we trust ONLY the first hop and use it as the
 //     key. This is correct when the immediate peer is a trusted reverse proxy
-//     (the Continuum host) that appends the original client IP. It is NOT
+//     (the Silo host) that appends the original client IP. It is NOT
 //     correct in deployments where untrusted clients can supply
 //     X-Forwarded-For themselves — operators in such deployments should strip
 //     the header at the edge.

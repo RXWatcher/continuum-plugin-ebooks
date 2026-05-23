@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/RXWatcher/continuum-plugin-ebooks/internal/auth"
+	"github.com/RXWatcher/silo-plugin-ebooks/internal/auth"
 )
 
 func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {

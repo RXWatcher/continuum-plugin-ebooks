@@ -16,7 +16,7 @@ import (
 	"encoding/hex"
 	"strconv"
 
-	"github.com/RXWatcher/continuum-plugin-ebooks/internal/store"
+	"github.com/RXWatcher/silo-plugin-ebooks/internal/store"
 )
 
 // ResolveMode returns the user's effective streaming mode. Currently

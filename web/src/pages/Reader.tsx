@@ -128,7 +128,7 @@ const highlightStyles: Array<{ label: string; value: HighlightStyle }> = [
   { label: "Squiggle", value: "squiggly" },
 ];
 
-const globalReaderDefaultsKey = "continuum-ebooks-reader-defaults";
+const globalReaderDefaultsKey = "silo-ebooks-reader-defaults";
 
 // clipExcerpt trims foliate-js search-result excerpt segments so cards stay
 // scannable. "lead" trims from the front (showing the tail of pre-match
@@ -289,7 +289,7 @@ export default function Reader() {
     const items = customFonts.data?.items ?? [];
     if (items.length === 0) return;
     const tag = document.createElement("style");
-    tag.setAttribute("data-continuum-custom-fonts", "1");
+    tag.setAttribute("data-silo-custom-fonts", "1");
     tag.textContent = items
       .map(
         (f) =>

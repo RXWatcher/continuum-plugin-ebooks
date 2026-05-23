@@ -10,7 +10,7 @@ import {
   type BookDoc,
   type TOCItem,
 } from "@/reader/readest/libs/document";
-import { ContinuumReaderService } from "@/reader/continuum/ContinuumReaderService";
+import { SiloReaderService } from "@/reader/silo/SiloReaderService";
 import type { Annotation } from "@/lib/api";
 
 type FoliateViewElement = HTMLElement & {
@@ -189,7 +189,7 @@ export const ReadestLiteReader = forwardRef<ReadestLiteReaderHandle, Props>(
     const configRef = useRef<Record<string, unknown>>({});
     const pendingConfigRef = useRef<Record<string, unknown> | null>(null);
     const progressTimerRef = useRef<number | null>(null);
-    const serviceRef = useRef<ContinuumReaderService | null>(null);
+    const serviceRef = useRef<SiloReaderService | null>(null);
     const annotationsRef = useRef<Annotation[]>(annotations);
     const drawnCfisRef = useRef<Set<string>>(new Set());
     const selectionCleanupRef = useRef<(() => void)[]>([]);
@@ -537,7 +537,7 @@ export const ReadestLiteReader = forwardRef<ReadestLiteReaderHandle, Props>(
 
     useEffect(() => {
       let cancelled = false;
-      const service = new ContinuumReaderService();
+      const service = new SiloReaderService();
       serviceRef.current = service;
       initializedRef.current = false;
       setError("");

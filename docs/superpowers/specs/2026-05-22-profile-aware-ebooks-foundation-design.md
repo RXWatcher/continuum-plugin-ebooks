@@ -1,16 +1,16 @@
 # Profile-Aware Ebooks Foundation — Design
 
 Date: 2026-05-22
-Plugin: `continuum-plugin-ebooks`
+Plugin: `silo-plugin-ebooks`
 
 ## Problem
 
-The ebooks plugin predates continuum's user-profile model. Identity is
+The ebooks plugin predates silo's user-profile model. Identity is
 user-level only — `auth.Identity` carries `UserID` but no profile. The public
 reader integrations authenticate with their own per-user credentials (OPDS
 against a hashed `opds_token`, kosync against a `kosync_user` password), and
 collections, reading progress, and content restriction are all keyed by
-`user_id`. A continuum user with sub-profiles (e.g. `jim` with a `laura`
+`user_id`. A silo user with sub-profiles (e.g. `jim` with a `laura`
 profile) cannot give each profile its own collections or its own reading
 identity on an external reader app — everything collapses to the account.
 
@@ -28,7 +28,7 @@ on it and is specced separately.
 ## Scope
 
 In scope:
-- Profile-aware `Identity` (`X-Continuum-Profile-Id`).
+- Profile-aware `Identity` (`X-Silo-Profile-Id`).
 - OPDS authentication via the core `ValidateProfileCredential` RPC.
 - kosync made profile-aware with a portal-managed credential.
 - Per-profile manual (`collection`) and smart (`smart_collection`) collections.
@@ -44,10 +44,10 @@ Out of scope:
 ## Dependencies
 
 - The core `RuntimeHost.ValidateProfileCredential` RPC and the SDK
-  `runtimehost.Client.ValidateProfileCredential` helper (continuum core +
+  `runtimehost.Client.ValidateProfileCredential` helper (silo core +
   `continuum-plugin-sdk`). Spec:
-  `continuum/docs/superpowers/specs/2026-05-13-profile-aware-third-party-auth-design.md`.
-- The host stamping `X-Continuum-Profile-Id` on proxied SPA requests.
+  `silo/docs/superpowers/specs/2026-05-13-profile-aware-third-party-auth-design.md`.
+- The host stamping `X-Silo-Profile-Id` on proxied SPA requests.
 
 Both are implemented; the SDK side ships in SDK PR #5.
 
@@ -56,9 +56,9 @@ Both are implemented; the SDK side ships in SDK PR #5.
 ### 1. Profile-aware identity
 
 `auth.Identity` gains a `ProfileID string` field. The identity middleware reads
-it from the `X-Continuum-Profile-Id` header, which the host now injects on
+it from the `X-Silo-Profile-Id` header, which the host now injects on
 authenticated SPA / `/api/v1/*` requests alongside the existing
-`X-Continuum-User-*` headers.
+`X-Silo-User-*` headers.
 
 `ProfileID == ""` denotes the **primary profile** — the canonical identity,
 matching core's `ValidateProfileCredential` contract and the host's header
@@ -79,7 +79,7 @@ Today OPDS uses HTTP Basic auth resolved by `opdsAuth` against a hashed
 `opds_token` JTI. This is replaced.
 
 OPDS Basic auth now carries `username` = `jim` or `jim#laura` and `password` =
-the continuum account password, optionally `password#pin` when the named
+the silo account password, optionally `password#pin` when the named
 profile is PIN-gated. `opdsAuth` calls `ValidateProfileCredential(username,
 password)` and resolves `(userID, profileID)`.
 
@@ -100,7 +100,7 @@ before sending it as `x-auth-key`. The plugin therefore never receives the
 plaintext password and cannot verify it against core's bcrypt. kosync cannot
 use `ValidateProfileCredential`; it must keep a kosync-specific credential the
 plugin can verify against the hash. This is a protocol constraint, not a design
-choice — it is the one reader surface that does not use the real continuum
+choice — it is the one reader surface that does not use the real silo
 password.
 
 kosync becomes profile-aware as follows:
@@ -134,7 +134,7 @@ effectively the primary profile's. No data backfill is required.
 
 The collection and smart-collection store methods change their identity
 argument from `userID` to `(userID, profileID)` and scope every query on the
-pair. Handlers read `profileID` from the section-1 identity — `X-Continuum-
+pair. Handlers read `profileID` from the section-1 identity — `X-Silo-
 Profile-Id` on SPA routes, the `ValidateProfileCredential` result on OPDS. The
 SPA's collection views become per-profile on their own, since the browser
 already sends the active profile through to the plugin.

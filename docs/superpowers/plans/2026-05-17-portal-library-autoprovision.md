@@ -9,7 +9,7 @@
 **Tech Stack:** Go (chi, pgx), React + @tanstack/react-query (portal SPA).
 
 Spec: `docs/superpowers/specs/2026-05-17-portal-library-autoprovision-design.md`
-Repo: `/opt/continuum_plugins/continuum-plugin-ebooks` (run all commands from there). The confusingly-named sibling `/opt/continuum_plugins/continuum-plugin-local-ebooks` must NOT be touched.
+Repo: `/opt/silo_plugins/silo-plugin-ebooks` (run all commands from there). The confusingly-named sibling `/opt/silo_plugins/silo-plugin-local-ebooks` must NOT be touched.
 
 Verified existing shapes (do not redefine):
 - `store.PortalLibrary{ ID int64; Name string; MediaType string; BackendPluginID string; BackendLibraryID *int64; Enabled bool; SortOrder int }`
@@ -19,7 +19,7 @@ Verified existing shapes (do not redefine):
 - `backend.LibraryInfo{ ID int64; Name string; Path string; MediaType string; Enabled bool; LastScannedAt string }`
 - `backend.NewEbookBackend(host *backend.HostHTTPClient, installID string) *backend.EbookBackend`; `(*EbookBackend).ListLibraries(ctx) ([]LibraryInfo, error)`.
 - `server.Server` has `deps Deps` with `deps.Store *store.Store`, `deps.Host *backend.HostHTTPClient`; helpers `writeJSON(w, code, v)`, `writeErr(w, code, msg string)` exist in package `server`.
-- `scheduler.Tasks` struct fields include `Store *store.Store`, `Host *backend.HostHTTPClient`, `Log hclog.Logger`. Scheduler task = method `func (t *Tasks) X(ctx context.Context) error`; registered in `cmd/continuum-plugin-ebooks/main.go` in the `scheduler.New(func() map[string]scheduler.TaskFn{...})` map.
+- `scheduler.Tasks` struct fields include `Store *store.Store`, `Host *backend.HostHTTPClient`, `Log hclog.Logger`. Scheduler task = method `func (t *Tasks) X(ctx context.Context) error`; registered in `cmd/silo-plugin-ebooks/main.go` in the `scheduler.New(func() map[string]scheduler.TaskFn{...})` map.
 - Frontend `web/src/lib/api.ts` exposes `api.get/api.put/api.post`; `web/src/pages/Admin.tsx` `LibrariesTab` already receives `backends: BackendOption[]` and uses `useMutation`/`useQueryClient`/`toast`/`Button`.
 
 ---
@@ -34,8 +34,8 @@ Modified:
 - `internal/server/admin_routes.go` — `handleAdminSyncLibraries` + route registration.
 - `internal/server/admin_sync_test.go` — handler test (new test file, package `server`).
 - `internal/scheduler/tasks.go` — `(*Tasks).PortalLibrarySync`.
-- `cmd/continuum-plugin-ebooks/main.go` — register `"portal_library_sync"` in the task map.
-- `cmd/continuum-plugin-ebooks/manifest.json` — add the `scheduled_task.v1` entry.
+- `cmd/silo-plugin-ebooks/main.go` — register `"portal_library_sync"` in the task map.
+- `cmd/silo-plugin-ebooks/manifest.json` — add the `scheduled_task.v1` entry.
 - `web/src/lib/api.ts` — `adminSyncLibraries`.
 - `web/src/pages/Admin.tsx` — backend select + "Sync from backend" button in `LibrariesTab`.
 
@@ -57,8 +57,8 @@ package libsync
 import (
 	"testing"
 
-	"github.com/RXWatcher/continuum-plugin-ebooks/internal/backend"
-	"github.com/RXWatcher/continuum-plugin-ebooks/internal/store"
+	"github.com/RXWatcher/silo-plugin-ebooks/internal/backend"
+	"github.com/RXWatcher/silo-plugin-ebooks/internal/store"
 )
 
 func i64(v int64) *int64 { return &v }
@@ -175,8 +175,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/RXWatcher/continuum-plugin-ebooks/internal/backend"
-	"github.com/RXWatcher/continuum-plugin-ebooks/internal/store"
+	"github.com/RXWatcher/silo-plugin-ebooks/internal/backend"
+	"github.com/RXWatcher/silo-plugin-ebooks/internal/store"
 )
 
 // SyncStats summarizes a reconcile pass.
@@ -300,7 +300,7 @@ func Sync(ctx context.Context, st LibStore, lister BackendLister, backendID stri
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `go test ./internal/libsync/`
-Expected: `ok  github.com/RXWatcher/continuum-plugin-ebooks/internal/libsync`
+Expected: `ok  github.com/RXWatcher/silo-plugin-ebooks/internal/libsync`
 
 - [ ] **Step 5: Commit**
 
@@ -489,7 +489,7 @@ func (s *Server) handleAdminSyncLibraries(w http.ResponseWriter, r *http.Request
 Add the import to `internal/server/admin_routes.go`'s import block (it already imports `backend`; add `libsync`):
 
 ```go
-	"github.com/RXWatcher/continuum-plugin-ebooks/internal/libsync"
+	"github.com/RXWatcher/silo-plugin-ebooks/internal/libsync"
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
@@ -517,7 +517,7 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 
 **Files:**
 - Modify: `internal/scheduler/tasks.go`
-- Modify: `cmd/continuum-plugin-ebooks/main.go`
+- Modify: `cmd/silo-plugin-ebooks/main.go`
 
 - [ ] **Step 1: Add the task method**
 
@@ -549,12 +549,12 @@ func (t *Tasks) PortalLibrarySync(ctx context.Context) error {
 Ensure `internal/scheduler/tasks.go` imports `libsync` (it already imports `backend`, `fmt`, `store`):
 
 ```go
-	"github.com/RXWatcher/continuum-plugin-ebooks/internal/libsync"
+	"github.com/RXWatcher/silo-plugin-ebooks/internal/libsync"
 ```
 
 - [ ] **Step 2: Register the task key in main.go**
 
-In `cmd/continuum-plugin-ebooks/main.go`, in the `scheduler.New(func() map[string]scheduler.TaskFn { ... })` returned map, add this entry alongside the others:
+In `cmd/silo-plugin-ebooks/main.go`, in the `scheduler.New(func() map[string]scheduler.TaskFn { ... })` returned map, add this entry alongside the others:
 
 ```go
 			"portal_library_sync": t.PortalLibrarySync,
@@ -568,7 +568,7 @@ Expected: exit 0.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add internal/scheduler/tasks.go cmd/continuum-plugin-ebooks/main.go
+git add internal/scheduler/tasks.go cmd/silo-plugin-ebooks/main.go
 git -c user.email=agent@anthropic.com -c user.name="Claude Code" commit -m "feat(scheduler): portal_library_sync task (configured backend, guarded)
 
 Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
@@ -579,11 +579,11 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 ## Task 5: Manifest scheduled_task entry
 
 **Files:**
-- Modify: `cmd/continuum-plugin-ebooks/manifest.json`
+- Modify: `cmd/silo-plugin-ebooks/manifest.json`
 
 - [ ] **Step 1: Add the capability**
 
-In `cmd/continuum-plugin-ebooks/manifest.json`, in the `capabilities` array, add this object immediately after the existing `{"type":"scheduled_task.v1","id":"kindle_send_retrier", ...}` entry:
+In `cmd/silo-plugin-ebooks/manifest.json`, in the `capabilities` array, add this object immediately after the existing `{"type":"scheduled_task.v1","id":"kindle_send_retrier", ...}` entry:
 
 ```json
     {"type": "scheduled_task.v1", "id": "portal_library_sync",
@@ -595,13 +595,13 @@ In `cmd/continuum-plugin-ebooks/manifest.json`, in the `capabilities` array, add
 
 - [ ] **Step 2: Validate JSON + build**
 
-Run: `python3 -c "import json;json.load(open('cmd/continuum-plugin-ebooks/manifest.json'))" && echo JSON_OK && go build ./...`
+Run: `python3 -c "import json;json.load(open('cmd/silo-plugin-ebooks/manifest.json'))" && echo JSON_OK && go build ./...`
 Expected: `JSON_OK`, build exit 0.
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add cmd/continuum-plugin-ebooks/manifest.json
+git add cmd/silo-plugin-ebooks/manifest.json
 git -c user.email=agent@anthropic.com -c user.name="Claude Code" commit -m "feat(manifest): hourly portal_library_sync scheduled task
 
 Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
@@ -724,7 +724,7 @@ Expected: build/vet clean; `NO_FAILURES` (store may SKIP without Postgres — ac
 
 - [ ] **Step 2: Frontend + manifest**
 
-Run: `cd web && (pnpm run build 2>/dev/null || npm run build) ; cd .. && python3 -c "import json;json.load(open('cmd/continuum-plugin-ebooks/manifest.json'))" && echo OK`
+Run: `cd web && (pnpm run build 2>/dev/null || npm run build) ; cd .. && python3 -c "import json;json.load(open('cmd/silo-plugin-ebooks/manifest.json'))" && echo OK`
 Expected: `✓ built`; `OK`.
 
 - [ ] **Step 3: Commit any residue**

@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/RXWatcher/continuum-plugin-ebooks/internal/store"
+	"github.com/RXWatcher/silo-plugin-ebooks/internal/store"
 )
 
 type fakeEventPublisher struct {
@@ -34,20 +34,20 @@ func TestPublishRequestSubmittedUsesTargetedPublisher(t *testing.T) {
 		ID:             "req-1",
 		Title:          "T",
 		Authors:        []string{"A"},
-		TargetPluginID: "  continuum.bookwarehouse-ebook  ",
+		TargetPluginID: "  silo.bookwarehouse-ebook  ",
 		MediaType:      "book",
 	})
 
-	if pub.target != "continuum.bookwarehouse-ebook" {
+	if pub.target != "silo.bookwarehouse-ebook" {
 		t.Fatalf("target = %q", pub.target)
 	}
 	if pub.name != "request_submitted" {
 		t.Fatalf("name = %q", pub.name)
 	}
-	if pub.payload["target_plugin_id"] != "continuum.bookwarehouse-ebook" {
+	if pub.payload["target_plugin_id"] != "silo.bookwarehouse-ebook" {
 		t.Fatalf("payload target = %+v", pub.payload)
 	}
-	if pub.payload["target_provider_plugin_id"] != "continuum.bookwarehouse-ebook" {
+	if pub.payload["target_provider_plugin_id"] != "silo.bookwarehouse-ebook" {
 		t.Fatalf("compat target = %+v", pub.payload)
 	}
 }
@@ -56,13 +56,13 @@ func TestPublishRequestSubmittedFallsBackToBroadcast(t *testing.T) {
 	pub := &fakeEventPublisher{}
 	publishRequestSubmitted(context.Background(), pub, store.Request{
 		ID:             "req-1",
-		TargetPluginID: "continuum.ebook-requests",
+		TargetPluginID: "silo.ebook-requests",
 	})
 
 	if pub.name != "request_submitted" {
 		t.Fatalf("name = %q", pub.name)
 	}
-	if pub.payload["target_plugin_id"] != "continuum.ebook-requests" {
+	if pub.payload["target_plugin_id"] != "silo.ebook-requests" {
 		t.Fatalf("payload target = %+v", pub.payload)
 	}
 }

@@ -1,5 +1,5 @@
 // Package web embeds the built SPA so the Go binary contains a single
-// artifact suitable for upload via continuum's plugin uploader.
+// artifact suitable for upload via silo's plugin uploader.
 package web
 
 import (

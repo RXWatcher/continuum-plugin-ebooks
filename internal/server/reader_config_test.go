@@ -15,8 +15,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/RXWatcher/continuum-plugin-ebooks/internal/migrate"
-	"github.com/RXWatcher/continuum-plugin-ebooks/internal/store"
+	"github.com/RXWatcher/silo-plugin-ebooks/internal/migrate"
+	"github.com/RXWatcher/silo-plugin-ebooks/internal/store"
 )
 
 var (
@@ -43,7 +43,7 @@ func readerConfigTestDSN() string {
 		return v
 	}
 	return fmt.Sprintf(
-		"postgres://continuum:continuum@localhost:5432/continuum?search_path=%s&sslmode=disable",
+		"postgres://silo:silo@localhost:5432/silo?search_path=%s&sslmode=disable",
 		readerConfigTestSchema(),
 	)
 }
@@ -100,7 +100,7 @@ func TestReaderConfigRoutesRoundTripAndMirrorProgress(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/me/books/book-1/reader-config", nil)
-	req.Header.Set("X-Continuum-User-Id", "user-1")
+	req.Header.Set("X-Silo-User-Id", "user-1")
 	handler.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("missing config status=%d body=%s", rec.Code, rec.Body.String())
@@ -119,7 +119,7 @@ func TestReaderConfigRoutesRoundTripAndMirrorProgress(t *testing.T) {
 	body := []byte(`{"config":{"location":"epubcfi(/6/4)","progress":[4,10],"booknotes":[]}}`)
 	rec = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodPut, "/api/v1/me/books/book-1/reader-config", bytes.NewReader(body))
-	req.Header.Set("X-Continuum-User-Id", "user-1")
+	req.Header.Set("X-Silo-User-Id", "user-1")
 	req.Header.Set("Content-Type", "application/json")
 	handler.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -128,7 +128,7 @@ func TestReaderConfigRoutesRoundTripAndMirrorProgress(t *testing.T) {
 
 	rec = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/me/books/book-1/reader-config", nil)
-	req.Header.Set("X-Continuum-User-Id", "user-1")
+	req.Header.Set("X-Silo-User-Id", "user-1")
 	handler.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("saved config status=%d body=%s", rec.Code, rec.Body.String())
@@ -172,7 +172,7 @@ func TestReaderConfigGetFallsBackToUserDataProgress(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/me/books/book-1/reader-config", nil)
-	req.Header.Set("X-Continuum-User-Id", "user-1")
+	req.Header.Set("X-Silo-User-Id", "user-1")
 	handler.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("get config status=%d body=%s", rec.Code, rec.Body.String())
@@ -226,7 +226,7 @@ func TestReaderConfigIncludesLinkedKosyncProgress(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/me/books/book-1/reader-config", nil)
-	req.Header.Set("X-Continuum-User-Id", "user-1")
+	req.Header.Set("X-Silo-User-Id", "user-1")
 	handler.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("get config status=%d body=%s", rec.Code, rec.Body.String())
@@ -256,7 +256,7 @@ func TestKosyncBookLinkRoute(t *testing.T) {
 	body := []byte(`{"document":"doc-route","format":"epub"}`)
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/me/books/book-1/kosync-link", bytes.NewReader(body))
-	req.Header.Set("X-Continuum-User-Id", "user-1")
+	req.Header.Set("X-Silo-User-Id", "user-1")
 	req.Header.Set("Content-Type", "application/json")
 	handler.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {

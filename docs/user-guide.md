@@ -5,7 +5,7 @@ This page is for end users of the ebooks portal. Operators should read
 
 ## What the portal does
 
-The portal is a web app at the root URL where your continuum
+The portal is a web app at the root URL where your silo
 administrator installed it. You can:
 
 - Browse the library and read EPUBs in the browser.
@@ -37,7 +37,7 @@ OPDS lets reader apps browse the same library you see on the portal.
 3. The portal shows a long random string **once**. Copy it.
 4. In your OPDS-compatible app, add a feed with:
    - URL: `https://your-portal/opds/`
-   - Username: your continuum user id (shown above the token list)
+   - Username: your silo user id (shown above the token list)
    - Password: the token string
 
 The token isn't your account password — it's a per-device key. If you
@@ -74,7 +74,7 @@ the portal):
 
 You can register a kosync-only account straight from KOReader by
 pointing it at `https://your-portal/kosync/` and choosing a username.
-This account is *not* linked to a continuum identity — it just syncs
+This account is *not* linked to a silo identity — it just syncs
 progress between your own KOReader devices.
 
 **Sync URL:** `https://your-portal/kosync/`
@@ -82,7 +82,7 @@ progress between your own KOReader devices.
 **Gotchas:**
 
 - If you registered through KOReader directly and later get a
-  continuum account, your sync state stays under the synthetic
+  silo account, your sync state stays under the synthetic
   identity. Re-register from the SPA to merge.
 - Two devices on the same book see whichever wrote progress most
   recently. Long airplane reads sync only when you reconnect.
@@ -164,9 +164,9 @@ on your behalf.
 ## Privacy and your data
 
 - **Reading progress and annotations** are per-account on this
-  continuum install. Not shared with anyone.
+  silo install. Not shared with anyone.
 - **Highlights and notes** stay in your account; export from
   **Settings → Export data**.
-- **OPDS tokens** are bound to your continuum account; an admin can
+- **OPDS tokens** are bound to your silo account; an admin can
   revoke them but cannot read them.
 - The portal **does not** send analytics off the server.

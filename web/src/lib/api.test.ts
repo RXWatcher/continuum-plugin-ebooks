@@ -34,7 +34,7 @@ describe("fetchInstalledBackends", () => {
         JSON.stringify([
           {
             id: 11,
-            plugin_id: "continuum-plugin-bookwarehouse-ebook",
+            plugin_id: "silo-plugin-bookwarehouse-ebook",
             enabled: true,
             capabilities: [
               {
@@ -50,7 +50,7 @@ describe("fetchInstalledBackends", () => {
           },
           {
             id: 12,
-            plugin_id: "continuum-plugin-something-else",
+            plugin_id: "silo-plugin-something-else",
             enabled: true,
             capabilities: [
               {
@@ -86,7 +86,7 @@ describe("fetchInstalledBackends", () => {
     expect(backends).toEqual([
       expect.objectContaining({
         id: 11,
-        plugin_id: "continuum-plugin-bookwarehouse-ebook",
+        plugin_id: "silo-plugin-bookwarehouse-ebook",
         display_name: "Bookwarehouse",
         ebook_roles: ["library_source", "download_provider"],
       }),
@@ -121,7 +121,7 @@ describe("fetchInstalledBackends", () => {
           JSON.stringify([
             {
               id: 21,
-              plugin_id: "continuum-plugin-local-ebooks",
+              plugin_id: "silo-plugin-local-ebooks",
               enabled: true,
               capabilities: [
                 {
@@ -172,7 +172,7 @@ describe("fetchInstalledBackends", () => {
     expect(backends).toEqual([
       expect.objectContaining({
         id: 21,
-        plugin_id: "continuum-plugin-local-ebooks",
+        plugin_id: "silo-plugin-local-ebooks",
         ebook_roles: ["library_source"],
       }),
     ]);

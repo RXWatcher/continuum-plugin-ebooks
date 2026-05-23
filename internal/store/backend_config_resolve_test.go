@@ -3,7 +3,7 @@ package store_test
 import (
 	"testing"
 
-	"github.com/RXWatcher/continuum-plugin-ebooks/internal/store"
+	"github.com/RXWatcher/silo-plugin-ebooks/internal/store"
 )
 
 // TestConfigBackendTarget pins the single resolver every backend-targeting
@@ -38,13 +38,13 @@ func TestConfigBackendTarget(t *testing.T) {
 		},
 		{
 			name:       "legacy non-numeric plugin id preserved",
-			cfg:        store.Config{TargetBackendPluginID: "continuum-plugin-ebookdb"},
-			wantTarget: "continuum-plugin-ebookdb",
+			cfg:        store.Config{TargetBackendPluginID: "silo-plugin-ebookdb"},
+			wantTarget: "silo-plugin-ebookdb",
 			wantHas:    true,
 		},
 		{
 			name:       "install id wins over plugin id",
-			cfg:        store.Config{TargetBackendPluginID: "continuum-plugin-ebookdb", TargetBackendInstallID: "7"},
+			cfg:        store.Config{TargetBackendPluginID: "silo-plugin-ebookdb", TargetBackendInstallID: "7"},
 			wantTarget: "7",
 			wantHas:    true,
 		},

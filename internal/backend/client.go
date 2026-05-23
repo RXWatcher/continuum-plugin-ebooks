@@ -1,5 +1,5 @@
 // Package backend is the portal's HTTP client for calling ebook backend
-// providers via the continuum host plugin proxy.
+// providers via the silo host plugin proxy.
 //
 // The host exposes a proxy at:
 //
@@ -35,7 +35,7 @@ const defaultTimeout = 60 * time.Second
 const maxResponseBytes = 10 << 20 // 10 MiB
 
 // HostHTTPClient is a thin HTTP client that knows how to address the
-// continuum host plugin proxy.
+// silo host plugin proxy.
 type HostHTTPClient struct {
 	hostBaseURL string // e.g. http://localhost:8090 (set from env or sensible default)
 	token       string // service token forwarded as bearer
@@ -67,7 +67,7 @@ func NewHostHTTPClient(baseURL, token string) *HostHTTPClient {
 // validInstallID reports whether s is a safe path segment for the
 // /api/v1/plugins/<id><path> host-proxy URL. A backend target is either a
 // numeric install id ("7") or a plugin-id slug
-// ("continuum.bookwarehouse-ebook"), both of which are
+// ("silo.bookwarehouse-ebook"), both of which are
 // [A-Za-z0-9._-]. Rejecting anything else stops a DB/config-sourced value
 // like "1/../../admin" or "a%2f.." from collapsing/escaping the proxy path
 // (SSRF / host-API traversal).

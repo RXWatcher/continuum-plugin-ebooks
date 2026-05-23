@@ -8,7 +8,7 @@ CREATE TABLE backend_config (
   cache_download_concurrency      INT NOT NULL DEFAULT 4,
   path_remappings                 JSONB NOT NULL DEFAULT '[]'::jsonb,
   kosync_secret                   BYTEA NOT NULL,
-  opds_realm                      TEXT NOT NULL DEFAULT 'Continuum Library',
+  opds_realm                      TEXT NOT NULL DEFAULT 'Silo Library',
   kindle_smtp_config              JSONB NOT NULL DEFAULT '{}'::jsonb,
   kepubify_path                   TEXT NOT NULL DEFAULT '/usr/local/bin/kepubify',
   updated_at                      TIMESTAMPTZ NOT NULL DEFAULT now(),

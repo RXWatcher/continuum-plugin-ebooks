@@ -4,11 +4,11 @@
 
 **Goal:** Make the ebooks plugin profile-aware — identity carries the profile, OPDS authenticates via the core `ValidateProfileCredential` RPC, kosync becomes profile-aware, collections become per-profile, and the content-restriction system is removed.
 
-**Architecture:** A `ProfileID` is threaded through `auth.Identity` (from `X-Continuum-Profile-Id`) and resolved on the public OPDS route through a new `CredentialValidator` that wraps the SDK runtimehost client. Collections and kosync tables gain a `profile_id` column and scope every query on `(user_id, profile_id)`, where `''` is the canonical primary-profile key. The unused `content_restriction` system is deleted.
+**Architecture:** A `ProfileID` is threaded through `auth.Identity` (from `X-Silo-Profile-Id`) and resolved on the public OPDS route through a new `CredentialValidator` that wraps the SDK runtimehost client. Collections and kosync tables gain a `profile_id` column and scope every query on `(user_id, profile_id)`, where `''` is the canonical primary-profile key. The unused `content_restriction` system is deleted.
 
 **Tech Stack:** Go (chi, pgx, golang-migrate), the continuum-plugin-sdk runtimehost client, React + TypeScript + Vite, PostgreSQL.
 
-**Conventions:** Work directly on `main`. Backend tests use a per-PID Postgres schema via `newTestStore`/migrations; run with `go test`. Frontend verified with `pnpm build` (`tsc -b` + Vite). The ebooks plugin resolves the local SDK through the existing `/opt/continuum_plugins/go.work`, which already includes `continuum-plugin-sdk` — so the new `runtimehost.Client.ValidateProfileCredential` helper (SDK PR #5) is available without a dependency bump. Append `Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>` to every commit.
+**Conventions:** Work directly on `main`. Backend tests use a per-PID Postgres schema via `newTestStore`/migrations; run with `go test`. Frontend verified with `pnpm build` (`tsc -b` + Vite). The ebooks plugin resolves the local SDK through the existing `/opt/silo_plugins/go.work`, which already includes `continuum-plugin-sdk` — so the new `runtimehost.Client.ValidateProfileCredential` helper (SDK PR #5) is available without a dependency bump. Append `Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>` to every commit.
 
 **Spec:** `docs/superpowers/specs/2026-05-22-profile-aware-ebooks-foundation-design.md`
 
@@ -33,7 +33,7 @@ Backend:
 - `internal/server/content_restriction.go` + `internal/store/content_restriction.go` — delete.
 - `internal/store/collection.go`, `internal/store/smart_collection.go`, `internal/store/kosync.go` — modify: `profile_id` dimension.
 - `internal/server/user_routes.go`, `internal/server/smart_collection_handler.go` — modify: thread `profileID`.
-- `cmd/continuum-plugin-ebooks/main.go` — modify: construct `hostCredentialValidator` into `Deps`.
+- `cmd/silo-plugin-ebooks/main.go` — modify: construct `hostCredentialValidator` into `Deps`.
 
 Frontend (`web/src/`):
 - `pages/Apps.tsx` — modify: remove `OPDSSection`, keep `KOReaderSection`.
@@ -60,8 +60,8 @@ func TestMiddlewareReadsProfileID(t *testing.T) {
 		got, _ = FromContext(r.Context())
 	}))
 	r := httptest.NewRequest("GET", "/", nil)
-	r.Header.Set("X-Continuum-User-Id", "u-1")
-	r.Header.Set("X-Continuum-Profile-Id", "p-9")
+	r.Header.Set("X-Silo-User-Id", "u-1")
+	r.Header.Set("X-Silo-Profile-Id", "p-9")
 	h.ServeHTTP(httptest.NewRecorder(), r)
 	if got.UserID != "u-1" || got.ProfileID != "p-9" {
 		t.Errorf("identity = %+v, want user u-1 profile p-9", got)
@@ -81,7 +81,7 @@ Expected: FAIL — `Identity` has no field `ProfileID`.
 In `internal/auth/identity.go`, add `ProfileID string` to the `Identity` struct after `UserID string`. In `Middleware`, add to the `Identity{...}` literal:
 
 ```go
-		ProfileID: r.Header.Get("X-Continuum-Profile-Id"),
+		ProfileID: r.Header.Get("X-Silo-Profile-Id"),
 ```
 
 - [x] **Step 4: Run the test to verify it passes**
@@ -103,7 +103,7 @@ git commit -m "feat(ebooks): profile id on Identity"
 **Files:**
 - Create: `internal/server/credential.go`
 - Modify: `internal/server/server.go` (`Deps`)
-- Modify: `cmd/continuum-plugin-ebooks/main.go`
+- Modify: `cmd/silo-plugin-ebooks/main.go`
 
 - [x] **Step 1: Create the interface and wrapper**
 
@@ -120,7 +120,7 @@ import (
 )
 
 // CredentialValidator resolves a third-party "user#profile" / "password#pin"
-// login to (userID, profileID) by delegating to the continuum host. profileID
+// login to (userID, profileID) by delegating to the silo host. profileID
 // is "" for the primary profile. Defined as an interface so reader-route
 // handlers can be tested with a fake.
 type CredentialValidator interface {
@@ -159,7 +159,7 @@ In `internal/server/server.go`, add a field to the `Deps` struct:
 
 - [x] **Step 3: Wire it in main**
 
-In `cmd/continuum-plugin-ebooks/main.go`, in the `server.Deps{...}` literal where the server is constructed, add:
+In `cmd/silo-plugin-ebooks/main.go`, in the `server.Deps{...}` literal where the server is constructed, add:
 
 ```go
 		Credentials: server.NewHostCredentialValidator(),
@@ -173,7 +173,7 @@ Expected: success. (If `sdkruntime.Host()` returns a type without `ValidateProfi
 - [x] **Step 5: Commit**
 
 ```bash
-git add internal/server/credential.go internal/server/server.go cmd/continuum-plugin-ebooks/main.go
+git add internal/server/credential.go internal/server/server.go cmd/silo-plugin-ebooks/main.go
 git commit -m "feat(ebooks): host-backed credential validator"
 ```
 
@@ -593,7 +593,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/RXWatcher/continuum-plugin-ebooks/internal/store"
+	"github.com/RXWatcher/silo-plugin-ebooks/internal/store"
 )
 
 func TestBuildOPDSCollectionsFeed(t *testing.T) {
@@ -629,7 +629,7 @@ Add a navigation feed builder (mirrors `buildOPDSCatalogFeed`'s style — naviga
 func buildOPDSCollectionsFeed(cols []store.Collection, now time.Time) opdsFeed {
 	feed := opdsFeed{
 		XMLNS:   "http://www.w3.org/2005/Atom",
-		ID:      "tag:continuum:ebooks:opds:collections",
+		ID:      "tag:silo:ebooks:opds:collections",
 		Title:   "My Collections",
 		Updated: now.UTC().Format(time.RFC3339),
 		Links: []opdsLink{
@@ -638,7 +638,7 @@ func buildOPDSCollectionsFeed(cols []store.Collection, now time.Time) opdsFeed {
 	}
 	for _, c := range cols {
 		feed.Entries = append(feed.Entries, opdsEntry{
-			ID:      "tag:continuum:ebooks:collection:" + c.ID,
+			ID:      "tag:silo:ebooks:collection:" + c.ID,
 			Title:   c.Name,
 			Updated: now.UTC().Format(time.RFC3339),
 			Links: []opdsLink{{
@@ -818,7 +818,7 @@ In `mountKosync`, remove the `POST /users/create` route. KOReader registration i
 
 - [x] **Step 2: Make registration profile-aware**
 
-In the authenticated kosync registration handler, the identity now carries `(UserID, ProfileID)` and the host injects `X-Continuum-User-Name` / `X-Continuum-Profile-Name`. Compute the kosync username as the `user#profile` string — `username` for the primary profile (`ProfileID == ""`), `username#profileName` otherwise — read from the request headers `X-Continuum-User-Name` and `X-Continuum-Profile-Name`. Store the `KosyncUser` with `UserID`, `ProfileID`, and that computed `KosyncUsername`. The kosync password handling (sha1 → bcrypt) is unchanged.
+In the authenticated kosync registration handler, the identity now carries `(UserID, ProfileID)` and the host injects `X-Silo-User-Name` / `X-Silo-Profile-Name`. Compute the kosync username as the `user#profile` string — `username` for the primary profile (`ProfileID == ""`), `username#profileName` otherwise — read from the request headers `X-Silo-User-Name` and `X-Silo-Profile-Name`. Store the `KosyncUser` with `UserID`, `ProfileID`, and that computed `KosyncUsername`. The kosync password handling (sha1 → bcrypt) is unchanged.
 
 - [x] **Step 3: Make auth and progress profile-aware**
 
@@ -971,7 +971,7 @@ Expected: PASS.
 
 - [x] **Step 4: Manual smoke check (optional but recommended)**
 
-Deploy with `/opt/continuum_plugins/install-plugin.sh continuum-plugin-ebooks` and verify in a browser: an OPDS reader authenticates with `user` / `user#profile` + the continuum password; a profile's collections show only that profile's collections in the SPA and over `/opds/collections`; the Apps page no longer shows OPDS tokens; the admin area no longer shows content restrictions.
+Deploy with `/opt/silo_plugins/install-plugin.sh silo-plugin-ebooks` and verify in a browser: an OPDS reader authenticates with `user` / `user#profile` + the silo password; a profile's collections show only that profile's collections in the SPA and over `/opds/collections`; the Apps page no longer shows OPDS tokens; the admin area no longer shows content restrictions.
 
 - [x] **Step 5: Final commit (only if step 4 surfaced fixes)**
 
@@ -985,6 +985,6 @@ git commit -m "fix(ebooks): smoke-test fixes for profile-aware foundation"
 ## Notes for the implementer
 
 - `profile_id = ''` is the primary profile and is unique only within a user — every profile-scoped query MUST scope on `(user_id, profile_id)`, never `profile_id` alone.
-- The ebooks plugin builds against the local SDK through `/opt/continuum_plugins/go.work`; `runtimehost.Client.ValidateProfileCredential` is available because the SDK working tree carries SDK PR #5. If `go build` cannot find that method, check the SDK checkout's branch.
+- The ebooks plugin builds against the local SDK through `/opt/silo_plugins/go.work`; `runtimehost.Client.ValidateProfileCredential` is available because the SDK working tree carries SDK PR #5. If `go build` cannot find that method, check the SDK checkout's branch.
 - Migration numbers `0032`–`0035` assume `0031` is the current highest. If another branch has added migrations, renumber to stay sequential.
 - `opdsAuth` now returns three values; every call site in `opds_kosync_routes.go` must be updated together or the package will not compile — Task 4 step 2 covers them all.

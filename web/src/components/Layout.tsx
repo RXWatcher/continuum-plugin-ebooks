@@ -30,22 +30,22 @@ export default function Layout() {
 function LayoutInner() {
   const loc = useLocation();
   const isAdminRoute = loc.pathname.startsWith("/admin");
-  const continuumHomeHref = isAdminRoute ? "/admin/plugins" : "/";
-  const continuumHomeTitle = isAdminRoute
-    ? "Back to Continuum plugins"
-    : "Back to Continuum";
+  const siloHomeHref = isAdminRoute ? "/admin/plugins" : "/";
+  const siloHomeTitle = isAdminRoute
+    ? "Back to Silo plugins"
+    : "Back to Silo";
   return (
     <div className="bg-background relative min-h-[100dvh] overflow-x-hidden text-foreground">
       <div className="from-primary/6 pointer-events-none fixed inset-x-0 top-0 z-0 h-48 bg-gradient-to-b to-transparent blur-3xl" />
       <header className="glass-dark border-border/70 sticky top-0 z-30 mx-3 mt-3 rounded-2xl border px-4 py-3 sm:mx-6 lg:mx-8">
         <div className="flex flex-wrap items-center gap-3">
           <a
-            href={continuumHomeHref}
+            href={siloHomeHref}
             className="text-muted-foreground hover:bg-surface-hover hover:text-foreground inline-flex min-h-9 min-w-9 items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors"
-            title={continuumHomeTitle}
+            title={siloHomeTitle}
           >
             <ArrowLeft className="size-4" />
-            <span className="hidden sm:inline">Continuum</span>
+            <span className="hidden sm:inline">Silo</span>
           </a>
           <span className="text-border/60" aria-hidden>
             /
@@ -87,7 +87,7 @@ function LayoutInner() {
             </NavTab>
             {/*
               No "Admin" tab here. The user portal is strictly user-facing;
-              admins reach the plugin's admin UI via the continuum host
+              admins reach the plugin's admin UI via the silo host
               sidebar (Apps → Books → Ebooks → [admin]). Mixing the two
               surfaces in this nav blurred the audience and is what users
               flagged as "user side has admin functions."

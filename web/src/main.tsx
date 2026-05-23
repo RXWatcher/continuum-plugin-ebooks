@@ -16,9 +16,9 @@ function detectBasename(): string {
   return m ? m[1] : "/";
 }
 
-// Apply continuum's theme to the plugin's <html> so semantic Tailwind classes
-// (bg-primary, bg-card, etc.) inherit continuum's color palette. Sidebar
-// link clicks pass ?theme=<continuum-active-theme>.
+// Apply silo's theme to the plugin's <html> so semantic Tailwind classes
+// (bg-primary, bg-card, etc.) inherit silo's color palette. Sidebar
+// link clicks pass ?theme=<silo-active-theme>.
 const theme = getCachedTheme();
 if (theme) {
   document.documentElement.dataset.theme = theme;
@@ -27,7 +27,7 @@ if (theme) {
 // Register the service worker so the browser will offer to install the portal
 // as a PWA. The SW lives at <mountPath>/sw.js with its scope rooted at
 // <mountPath>/ — anything broader would conflict with other plugins served
-// from the same continuum origin. Failure is silent (dev / non-secure
+// from the same silo origin. Failure is silent (dev / non-secure
 // contexts); the SPA still works, just no install prompt.
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {

@@ -1,7 +1,7 @@
 # Scheduled tasks
 
 Seven `scheduled_task.v1` capabilities are declared in
-[`manifest.json`](../cmd/continuum-plugin-ebooks/manifest.json) and
+[`manifest.json`](../cmd/silo-plugin-ebooks/manifest.json) and
 dispatched by [`internal/scheduler/`](../internal/scheduler/). The host
 calls `Run(task_key)` on the cron schedule; the dispatcher maps
 `plugin:<installID>:<capabilityID>` to the right `TaskFn`.

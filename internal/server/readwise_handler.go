@@ -8,9 +8,9 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/RXWatcher/continuum-plugin-ebooks/internal/auth"
-	"github.com/RXWatcher/continuum-plugin-ebooks/internal/readwise"
-	"github.com/RXWatcher/continuum-plugin-ebooks/internal/store"
+	"github.com/RXWatcher/silo-plugin-ebooks/internal/auth"
+	"github.com/RXWatcher/silo-plugin-ebooks/internal/readwise"
+	"github.com/RXWatcher/silo-plugin-ebooks/internal/store"
 )
 
 // Readwise integration routes — per-user token storage + export
@@ -152,7 +152,7 @@ func (s *Server) handleReadwiseExportBook(w http.ResponseWriter, r *http.Request
 			Text:       text,
 			Title:      title,
 			Author:     author,
-			SourceType: "continuum-ebooks",
+			SourceType: "silo-ebooks",
 			Category:   "books",
 			Note:       a.NoteText,
 		}

@@ -8,7 +8,7 @@ import (
 )
 
 // CredentialValidator resolves a third-party "user#profile" / "password#pin"
-// login to (userID, profileID) by delegating to the continuum host. profileID
+// login to (userID, profileID) by delegating to the silo host. profileID
 // is "" for the primary profile. Defined as an interface so reader-route
 // handlers can be tested with a fake.
 type CredentialValidator interface {

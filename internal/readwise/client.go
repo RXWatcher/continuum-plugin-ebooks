@@ -30,7 +30,7 @@ type Highlight struct {
 	Author        string `json:"author,omitempty"`
 	ImageURL      string `json:"image_url,omitempty"`
 	SourceURL     string `json:"source_url,omitempty"`
-	SourceType    string `json:"source_type,omitempty"` // e.g. "continuum-ebooks"
+	SourceType    string `json:"source_type,omitempty"` // e.g. "silo-ebooks"
 	Category      string `json:"category,omitempty"`    // "books" / "articles" / ...
 	Note          string `json:"note,omitempty"`
 	Location      int    `json:"location,omitempty"`

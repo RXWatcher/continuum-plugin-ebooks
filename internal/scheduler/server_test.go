@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	pluginv1 "github.com/ContinuumApp/continuum-plugin-sdk/pkg/pluginproto/continuum/plugin/v1"
+	pluginv1 "github.com/ContinuumApp/continuum-plugin-sdk/pkg/pluginproto/silo/plugin/v1"
 )
 
 func TestTaskID(t *testing.T) {

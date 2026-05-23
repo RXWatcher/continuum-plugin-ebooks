@@ -124,9 +124,9 @@ manager. Fix by setting `cache_dir`.
 ### Every OPDS request returns 401
 
 - Token expired (`revoked_at IS NOT NULL`) — issue a new one.
-- User entered the wrong continuum user id as the Basic username.
+- User entered the wrong silo user id as the Basic username.
   The JTI is correct but the row's `user_id != username` check fails.
-- App is sending the JTI as the username and continuum id as the
+- App is sending the JTI as the username and silo id as the
   password. Some readers UI's leak. Swap.
 
 ### "no backend" 412 from OPDS
@@ -144,7 +144,7 @@ Missing trailing slash. Configure the app with `/opds/`.
 
 A previous public registration with the same username exists. There is
 no merge path between synthetic (`kosync:<username>`) and
-authenticated (`<continuum-user-id>`) rows. Either:
+authenticated (`<silo-user-id>`) rows. Either:
 
 - Pick a different username, or
 - `DELETE FROM kosync_user WHERE kosync_username='<name>';` (admin) and
@@ -161,7 +161,7 @@ device's view; the GET returns the newest.
 ### Sync seems to work but the SPA shows "Not registered"
 
 The user registered via the public path (synthetic id) but is logged
-into continuum with a different user. Re-register from
+into silo with a different user. Re-register from
 **SPA → Settings → KOReader**.
 
 ## Kobo Sync

@@ -8,8 +8,8 @@ import (
 
 func TestMiddlewareReadsHostSingularRoleHeader(t *testing.T) {
 	req := httptest.NewRequest("GET", "/", nil)
-	req.Header.Set("X-Continuum-User-Id", "u-1")
-	req.Header.Set("X-Continuum-User-Role", "admin")
+	req.Header.Set("X-Silo-User-Id", "u-1")
+	req.Header.Set("X-Silo-User-Role", "admin")
 
 	var got Identity
 	handler := Middleware(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
@@ -25,14 +25,14 @@ func TestMiddlewareReadsHostSingularRoleHeader(t *testing.T) {
 		t.Fatalf("UserID = %q, want u-1", got.UserID)
 	}
 	if !got.IsAdmin {
-		t.Fatal("IsAdmin = false, want true for X-Continuum-User-Role: admin")
+		t.Fatal("IsAdmin = false, want true for X-Silo-User-Role: admin")
 	}
 }
 
 func TestMiddlewareFallsBackToPluralRolesHeader(t *testing.T) {
 	req := httptest.NewRequest("GET", "/", nil)
-	req.Header.Set("X-Continuum-User-Id", "u-2")
-	req.Header.Set("X-Continuum-User-Roles", "user, admin")
+	req.Header.Set("X-Silo-User-Id", "u-2")
+	req.Header.Set("X-Silo-User-Roles", "user, admin")
 
 	var got Identity
 	handler := Middleware(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
@@ -58,8 +58,8 @@ func TestMiddlewareReadsProfileID(t *testing.T) {
 		got, _ = FromContext(r.Context())
 	}))
 	r := httptest.NewRequest("GET", "/", nil)
-	r.Header.Set("X-Continuum-User-Id", "u-1")
-	r.Header.Set("X-Continuum-Profile-Id", "p-9")
+	r.Header.Set("X-Silo-User-Id", "u-1")
+	r.Header.Set("X-Silo-Profile-Id", "p-9")
 	h.ServeHTTP(httptest.NewRecorder(), r)
 	if got.UserID != "u-1" || got.ProfileID != "p-9" {
 		t.Errorf("identity = %+v, want user u-1 profile p-9", got)

@@ -32,7 +32,7 @@ func TestGetStream_RejectsNonNumericInstallID(t *testing.T) {
 		t.Fatal("a rejected install id still produced an HTTP request")
 	}
 	// Both legitimate forms — numeric install id and plugin-id slug — pass.
-	for _, ok := range []string{"7", "inst", "continuum.bookwarehouse-ebook"} {
+	for _, ok := range []string{"7", "inst", "silo.bookwarehouse-ebook"} {
 		if _, err := c.GetStream(context.Background(), ok, "/api/v1/x", nil); err != nil {
 			t.Fatalf("valid install id %q rejected: %v", ok, err)
 		}

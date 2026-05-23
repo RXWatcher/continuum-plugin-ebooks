@@ -72,7 +72,7 @@ func defaultConfigShape() Config {
 		CacheMaxSizeGB:           10,
 		CacheDownloadConcurrency: 4,
 		PathRemappings:           []byte("[]"),
-		OpdsRealm:                "Continuum Library",
+		OpdsRealm:                "Silo Library",
 		KindleSMTPConfig:         []byte("{}"),
 		KepubifyPath:             "/usr/local/bin/kepubify",
 	}
@@ -175,7 +175,7 @@ func configWithDefaults(c Config) Config {
 		c.DefaultStreamingMode = "proxy"
 	}
 	if c.OpdsRealm == "" {
-		c.OpdsRealm = "Continuum Library"
+		c.OpdsRealm = "Silo Library"
 	}
 	if c.KepubifyPath == "" {
 		c.KepubifyPath = "/usr/local/bin/kepubify"

@@ -27,7 +27,7 @@ func TestAnnotationRoutesPreserveReadestFields(t *testing.T) {
 	}`)
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/me/books/book-1/annotations", bytes.NewReader(body))
-	req.Header.Set("X-Continuum-User-Id", "user-1")
+	req.Header.Set("X-Silo-User-Id", "user-1")
 	req.Header.Set("Content-Type", "application/json")
 	handler.ServeHTTP(rec, req)
 	if rec.Code != http.StatusCreated {
@@ -36,7 +36,7 @@ func TestAnnotationRoutesPreserveReadestFields(t *testing.T) {
 
 	rec = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/me/books/book-1/annotations", nil)
-	req.Header.Set("X-Continuum-User-Id", "user-1")
+	req.Header.Set("X-Silo-User-Id", "user-1")
 	handler.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("list status=%d body=%s", rec.Code, rec.Body.String())
@@ -83,7 +83,7 @@ func TestAnnotationRoutesPreserveReadestFields(t *testing.T) {
 	}`)
 	rec = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodPatch, "/api/v1/me/annotations/"+listed.Items[0].ID, bytes.NewReader(update))
-	req.Header.Set("X-Continuum-User-Id", "user-1")
+	req.Header.Set("X-Silo-User-Id", "user-1")
 	req.Header.Set("Content-Type", "application/json")
 	handler.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -91,7 +91,7 @@ func TestAnnotationRoutesPreserveReadestFields(t *testing.T) {
 	}
 	rec = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/me/books/book-1/annotations", nil)
-	req.Header.Set("X-Continuum-User-Id", "user-1")
+	req.Header.Set("X-Silo-User-Id", "user-1")
 	handler.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("list after update status=%d body=%s", rec.Code, rec.Body.String())

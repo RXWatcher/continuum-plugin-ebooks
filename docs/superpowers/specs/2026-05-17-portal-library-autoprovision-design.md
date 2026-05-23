@@ -2,11 +2,11 @@
 
 Date: 2026-05-17
 Status: Approved (design); pending spec review before implementation planning.
-Plugin: `continuum-plugin-ebooks` (the portal)
+Plugin: `silo-plugin-ebooks` (the portal)
 
 ## 1. Problem & Goal
 
-A backend (e.g. `continuum-plugin-local-ebooks`) can expose many libraries,
+A backend (e.g. `silo-plugin-local-ebooks`) can expose many libraries,
 each with its own media type. The portal does **not** present them
 automatically — an admin must hand-create one `portal_library`
 ("presentation shelf") per backend library and map each to the right
@@ -101,7 +101,7 @@ never a silent prune).
 ### 4.2 Scheduled task
 
 New `scheduled_task.v1` `portal_library_sync` (hourly cron) in
-`cmd/continuum-plugin-ebooks/manifest.json`, dispatched in `main.go`'s
+`cmd/silo-plugin-ebooks/manifest.json`, dispatched in `main.go`'s
 scheduler map alongside `request_reconciler`/`cache_evictor`. Syncs the
 configured target backend via `cfg.BackendTarget()` (the resolver added
 earlier this session). No backend configured → no-op. Same orchestrator →

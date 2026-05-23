@@ -11,8 +11,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/RXWatcher/continuum-plugin-ebooks/internal/migrate"
-	"github.com/RXWatcher/continuum-plugin-ebooks/internal/store"
+	"github.com/RXWatcher/silo-plugin-ebooks/internal/migrate"
+	"github.com/RXWatcher/silo-plugin-ebooks/internal/store"
 )
 
 var (
@@ -39,7 +39,7 @@ func testDSN() string {
 		return v
 	}
 	return fmt.Sprintf(
-		"postgres://continuum:continuum@localhost:5432/continuum?search_path=%s&sslmode=disable",
+		"postgres://silo:silo@localhost:5432/silo?search_path=%s&sslmode=disable",
 		schemaName(),
 	)
 }
@@ -108,7 +108,7 @@ func TestStore_Smoke(t *testing.T) {
 	if len(cfg.KosyncSecret) == 0 {
 		t.Errorf("kosync_secret should be auto-populated")
 	}
-	cfg.TargetBackendPluginID = "continuum.ebook-library-source"
+	cfg.TargetBackendPluginID = "silo.ebook-library-source"
 	if err := s.UpsertConfig(ctx, cfg); err != nil {
 		t.Fatalf("UpsertConfig: %v", err)
 	}
@@ -142,7 +142,7 @@ func TestStore_Smoke(t *testing.T) {
 	// request
 	if err := s.InsertRequest(ctx, store.Request{
 		ID: "r1", UserID: "u1", Title: "X", Authors: []string{"A"},
-		Status: "pending", TargetPluginID: "continuum.ebook-library-source",
+		Status: "pending", TargetPluginID: "silo.ebook-library-source",
 	}); err != nil {
 		t.Fatalf("InsertRequest: %v", err)
 	}

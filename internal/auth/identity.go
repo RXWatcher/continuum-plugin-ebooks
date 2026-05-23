@@ -1,4 +1,4 @@
-// Package auth provides middleware that reads continuum identity headers and
+// Package auth provides middleware that reads silo identity headers and
 // puts an Identity into the request context. The host sets these headers on
 // every authenticated route; readers should never trust them on a route
 // declared access:public.
@@ -30,18 +30,18 @@ func FromContext(ctx context.Context) (Identity, bool) {
 	return id, ok
 }
 
-// Middleware injects an Identity from X-Continuum-User-* headers.
+// Middleware injects an Identity from X-Silo-User-* headers.
 func Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		id := Identity{
-			UserID:    r.Header.Get("X-Continuum-User-Id"),
-			ProfileID: r.Header.Get("X-Continuum-Profile-Id"),
-			Username:  r.Header.Get("X-Continuum-User-Username"),
-			Email:     r.Header.Get("X-Continuum-User-Email"),
+			UserID:    r.Header.Get("X-Silo-User-Id"),
+			ProfileID: r.Header.Get("X-Silo-Profile-Id"),
+			Username:  r.Header.Get("X-Silo-User-Username"),
+			Email:     r.Header.Get("X-Silo-User-Email"),
 		}
-		roles := r.Header.Get("X-Continuum-User-Role")
+		roles := r.Header.Get("X-Silo-User-Role")
 		if roles == "" {
-			roles = r.Header.Get("X-Continuum-User-Roles")
+			roles = r.Header.Get("X-Silo-User-Roles")
 		}
 		for _, role := range strings.Split(roles, ",") {
 			if strings.TrimSpace(role) == "admin" {

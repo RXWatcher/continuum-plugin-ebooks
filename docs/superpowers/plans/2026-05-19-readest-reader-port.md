@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Replace the current `epubjs` reader with a Readest-derived, Foliate-powered reader that opens Readest-supported formats and preserves Readest reader features while using Continuum server state as the source of truth.
+**Goal:** Replace the current `epubjs` reader with a Readest-derived, Foliate-powered reader that opens Readest-supported formats and preserves Readest reader features while using Silo server state as the source of truth.
 
-**Architecture:** Keep the existing Go plugin backend and current catalog/admin Vite app. Port the Readest reader runtime into the Vite frontend behind a `ContinuumReaderService` adapter, and expand backend persistence to store Readest-compatible reader config and booknotes. Do not import Tauri, Next, Readest cloud auth, or Readest library-management flows.
+**Architecture:** Keep the existing Go plugin backend and current catalog/admin Vite app. Port the Readest reader runtime into the Vite frontend behind a `SiloReaderService` adapter, and expand backend persistence to store Readest-compatible reader config and booknotes. Do not import Tauri, Next, Readest cloud auth, or Readest library-management flows.
 
 **Tech Stack:** Go, PostgreSQL migrations, Vite, React 19, Zustand, `foliate-js`, `@zip.js/zip.js`, `fflate`, `pdfjs-dist`, TypeScript.
 
@@ -26,13 +26,13 @@ Frontend files:
 
 - Modify `web/package.json`: Remove `epubjs`, add Foliate/Readest runtime dependencies.
 - Modify `web/vite.config.ts`: Add aliases needed by the port.
-- Create `web/src/reader/continuum/ContinuumReaderService.ts`: Adapter between Readest reader expectations and plugin APIs.
-- Create `web/src/reader/continuum/types.ts`: Continuum-specific reader DTOs and conversion helpers.
-- Create `web/src/reader/continuum/navigation.ts`: Vite/react-router replacement for the small `next/navigation` surface the reader needs.
+- Create `web/src/reader/silo/SiloReaderService.ts`: Adapter between Readest reader expectations and plugin APIs.
+- Create `web/src/reader/silo/types.ts`: Silo-specific reader DTOs and conversion helpers.
+- Create `web/src/reader/silo/navigation.ts`: Vite/react-router replacement for the small `next/navigation` surface the reader needs.
 - Create `web/src/reader/readest/`: Ported Readest reader modules. Keep paths close to Readest where practical.
 - Modify `web/src/pages/Reader.tsx`: Replace the `epubjs` reader with the Readest-derived reader entry.
 - Modify `web/src/lib/api.ts`: Add typed reader config/booknote API calls.
-- Add focused frontend tests under `web/src/reader/continuum/*.test.ts`.
+- Add focused frontend tests under `web/src/reader/silo/*.test.ts`.
 
 Reference source files:
 
@@ -49,7 +49,7 @@ Reference source files:
 - Server progress/config wins when a book opens.
 - The reader must not write page-one or transient preview progress over server progress during initialization.
 - Existing API clients that use `last_cfi`, `read_progress`, and simple annotations must continue to work.
-- Do not port Tauri APIs. Native-only operations become web no-ops or Continuum API calls.
+- Do not port Tauri APIs. Native-only operations become web no-ops or Silo API calls.
 - Do not port Readest cloud auth or full library/import management.
 - Keep the port recognizably close to Readest so future upstream comparison remains possible.
 
@@ -392,17 +392,17 @@ Expected: build fails only because `Reader.tsx` still imports `epubjs`, or passe
 
 ---
 
-### Task 5: Continuum Reader Service Adapter
+### Task 5: Silo Reader Service Adapter
 
 **Files:**
-- Create: `web/src/reader/continuum/types.ts`
-- Create: `web/src/reader/continuum/ContinuumReaderService.ts`
+- Create: `web/src/reader/silo/types.ts`
+- Create: `web/src/reader/silo/SiloReaderService.ts`
 - Modify: `web/src/lib/api.ts`
-- Test: `web/src/reader/continuum/ContinuumReaderService.test.ts`
+- Test: `web/src/reader/silo/SiloReaderService.test.ts`
 
 - [ ] **Step 1: Add DTO types**
 
-Create `web/src/reader/continuum/types.ts`:
+Create `web/src/reader/silo/types.ts`:
 
 ```ts
 export type ReaderConfigEnvelope = {
@@ -427,7 +427,7 @@ export type ReadestBookNote = {
   deletedAt?: number | null;
 };
 
-export type ContinuumReaderBook = {
+export type SiloReaderBook = {
   id: string;
   hash: string;
   format: string;
@@ -460,7 +460,7 @@ export const putReaderConfig = (
 
 - [ ] **Step 3: Add service adapter**
 
-Create `web/src/reader/continuum/ContinuumReaderService.ts`:
+Create `web/src/reader/silo/SiloReaderService.ts`:
 
 ```ts
 import {
@@ -471,7 +471,7 @@ import {
   type EbookDetail,
 } from "@/lib/api";
 
-export class ContinuumReaderService {
+export class SiloReaderService {
   async loadBook(bookID: string): Promise<EbookDetail> {
     return getBook(bookID);
   }
@@ -580,7 +580,7 @@ Create `web/src/reader/ReadestLiteReader.tsx`:
 ```tsx
 import { useEffect, useRef, useState } from "react";
 import { DocumentLoader, type BookDoc } from "@/reader/readest/libs/document";
-import { ContinuumReaderService } from "@/reader/continuum/ContinuumReaderService";
+import { SiloReaderService } from "@/reader/silo/SiloReaderService";
 
 type Props = {
   bookID: string;
@@ -594,7 +594,7 @@ export function ReadestLiteReader({ bookID, format }: Props) {
 
   useEffect(() => {
     let cancelled = false;
-    const service = new ContinuumReaderService();
+    const service = new SiloReaderService();
 
     async function open() {
       try {
@@ -708,14 +708,14 @@ Replace imports from `@tauri-apps/*` with `web/src/reader/readest/shims/tauri.ts
 
 ```ts
 export const getCurrentWindow = () => ({
-  label: "continuum-reader",
+  label: "silo-reader",
   close: async () => undefined,
 });
 ```
 
 - [ ] **Step 3: Replace Readest AppService usage**
 
-Create `web/src/reader/readest/context/EnvContext.tsx` that provides the minimal `envConfig.getAppService()` and `appService` shape backed by `ContinuumReaderService`.
+Create `web/src/reader/readest/context/EnvContext.tsx` that provides the minimal `envConfig.getAppService()` and `appService` shape backed by `SiloReaderService`.
 
 Set booleans:
 
@@ -750,11 +750,11 @@ For each missing import, either copy the exact Readest reader dependency or repl
 - Modify: `web/src/reader/readest/store/bookDataStore.ts`
 - Modify: `web/src/reader/readest/store/readerStore.ts`
 - Modify: `web/src/reader/readest/app/reader/hooks/useProgressAutoSave.ts`
-- Modify: `web/src/reader/continuum/ContinuumReaderService.ts`
+- Modify: `web/src/reader/silo/SiloReaderService.ts`
 
 - [ ] **Step 1: Load config from server before opening view**
 
-Ensure the Readest init flow calls `ContinuumReaderService.loadBookConfig(bookID)` before `view.open(bookDoc)` and passes `config.location` to `view.init({ lastLocation })`.
+Ensure the Readest init flow calls `SiloReaderService.loadBookConfig(bookID)` before `view.open(bookDoc)` and passes `config.location` to `view.init({ lastLocation })`.
 
 - [ ] **Step 2: Guard initialization relocates**
 
@@ -812,7 +812,7 @@ Verify `view.addAnnotation(annotation)` is called for active notes after section
 
 - [ ] **Step 3: Enable notebook**
 
-Keep Readest notebook tabs for notes and excerpts. Disable AI assistant integrations unless a Continuum AI service is explicitly wired.
+Keep Readest notebook tabs for notes and excerpts. Disable AI assistant integrations unless a Silo AI service is explicitly wired.
 
 - [ ] **Step 4: Enable sidebar**
 
@@ -890,5 +890,5 @@ Expected: both pass.
 
 - Spec coverage: The plan covers the stable architecture, no Tauri, no `epubjs`, Readest-derived reader behavior, Foliate format compatibility, server-authoritative progress, backend persistence expansion, and current-client compatibility.
 - Placeholder scan: The plan contains concrete paths, route shapes, migration SQL, adapter code, and verification commands.
-- Type consistency: Backend uses `ReaderConfig`; frontend uses `ReaderConfigEnvelope`, `ContinuumReaderService`, and Readest-compatible `BookNote` naming.
+- Type consistency: Backend uses `ReaderConfig`; frontend uses `ReaderConfigEnvelope`, `SiloReaderService`, and Readest-compatible `BookNote` naming.
 

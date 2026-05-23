@@ -7,13 +7,13 @@ import (
 	"fmt"
 	"strings"
 
-	pluginv1 "github.com/ContinuumApp/continuum-plugin-sdk/pkg/pluginproto/continuum/plugin/v1"
+	pluginv1 "github.com/ContinuumApp/continuum-plugin-sdk/pkg/pluginproto/silo/plugin/v1"
 )
 
 // TaskFn is invoked when its registered task fires.
 type TaskFn func(ctx context.Context) error
 
-// taskID extracts the capability id from a scheduled-task key. The Continuum
+// taskID extracts the capability id from a scheduled-task key. The Silo
 // host sends "plugin:<installationID>:<capabilityID>" (task_registry
 // pluginTaskKey); bare ids may arrive from host integration tests. The
 // manifest's capability ids contain no ':'.

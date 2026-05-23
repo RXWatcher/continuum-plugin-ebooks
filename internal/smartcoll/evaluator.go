@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/RXWatcher/continuum-plugin-ebooks/internal/backend"
+	"github.com/RXWatcher/silo-plugin-ebooks/internal/backend"
 )
 
 // Candidate is the input shape to Evaluate — one backend ebook plus

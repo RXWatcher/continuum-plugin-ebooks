@@ -21,9 +21,9 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/RXWatcher/continuum-plugin-ebooks/internal/auth"
-	"github.com/RXWatcher/continuum-plugin-ebooks/internal/backend"
-	"github.com/RXWatcher/continuum-plugin-ebooks/internal/store"
+	"github.com/RXWatcher/silo-plugin-ebooks/internal/auth"
+	"github.com/RXWatcher/silo-plugin-ebooks/internal/backend"
+	"github.com/RXWatcher/silo-plugin-ebooks/internal/store"
 )
 
 // -- OPDS feeds (public route; basic-auth handled here) ------------------
@@ -71,8 +71,8 @@ type opdsLink struct {
 func (s *Server) handleOPDSRoot(w http.ResponseWriter, r *http.Request) {
 	feed := opdsFeed{
 		XMLNS:   "http://www.w3.org/2005/Atom",
-		ID:      "tag:continuum:ebooks:opds",
-		Title:   "Continuum Library",
+		ID:      "tag:silo:ebooks:opds",
+		Title:   "Silo Library",
 		Updated: time.Now().UTC().Format(time.RFC3339),
 		Links: []opdsLink{
 			{Rel: "self", Type: "application/atom+xml;profile=opds-catalog", Href: "/opds/"},
@@ -106,7 +106,7 @@ func opdsCatalogLimit(r *http.Request) int {
 func buildOPDSCatalogFeed(env backend.PageEnvelope[backend.EbookSummary], realm string, limit int, now time.Time) opdsFeed {
 	feed := opdsFeed{
 		XMLNS:   "http://www.w3.org/2005/Atom",
-		ID:      "tag:continuum:ebooks:opds:catalog",
+		ID:      "tag:silo:ebooks:opds:catalog",
 		Title:   realm + " — Catalog",
 		Updated: now.UTC().Format(time.RFC3339),
 		Links: []opdsLink{
@@ -126,7 +126,7 @@ func buildOPDSCatalogFeed(env backend.PageEnvelope[backend.EbookSummary], realm 
 	}
 	for _, b := range env.Items {
 		entry := opdsEntry{
-			ID: "tag:continuum:ebooks:book:" + b.ID, Title: b.Title,
+			ID: "tag:silo:ebooks:book:" + b.ID, Title: b.Title,
 			Updated: now.UTC().Format(time.RFC3339),
 		}
 		for _, a := range b.Authors {
@@ -190,8 +190,8 @@ func (s *Server) handleOPDSSearch(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/opensearchdescription+xml")
 		_, _ = w.Write([]byte(`<?xml version="1.0"?>
 <OpenSearchDescription xmlns="http://a9.com/-/spec/opensearch/1.1/">
-  <ShortName>Continuum Library</ShortName>
-  <Description>Search Continuum's ebook library</Description>
+  <ShortName>Silo Library</ShortName>
+  <Description>Search Silo's ebook library</Description>
   <Url template="/opds/search?q={searchTerms}" type="application/atom+xml"/>
 </OpenSearchDescription>`))
 		return
@@ -209,13 +209,13 @@ func (s *Server) handleOPDSSearch(w http.ResponseWriter, r *http.Request) {
 	}
 	feed := opdsFeed{
 		XMLNS:   "http://www.w3.org/2005/Atom",
-		ID:      "tag:continuum:ebooks:opds:search",
+		ID:      "tag:silo:ebooks:opds:search",
 		Title:   "Search: " + q,
 		Updated: time.Now().UTC().Format(time.RFC3339),
 	}
 	for _, b := range env.Items {
 		entry := opdsEntry{
-			ID: "tag:continuum:ebooks:book:" + b.ID, Title: b.Title,
+			ID: "tag:silo:ebooks:book:" + b.ID, Title: b.Title,
 			Updated: time.Now().UTC().Format(time.RFC3339),
 		}
 		for _, a := range b.Authors {
@@ -238,7 +238,7 @@ func (s *Server) handleOPDSSearch(w http.ResponseWriter, r *http.Request) {
 func buildOPDSCollectionsFeed(cols []store.Collection, now time.Time) opdsFeed {
 	feed := opdsFeed{
 		XMLNS:   "http://www.w3.org/2005/Atom",
-		ID:      "tag:continuum:ebooks:opds:collections",
+		ID:      "tag:silo:ebooks:opds:collections",
 		Title:   "My Collections",
 		Updated: now.UTC().Format(time.RFC3339),
 		Links: []opdsLink{
@@ -247,7 +247,7 @@ func buildOPDSCollectionsFeed(cols []store.Collection, now time.Time) opdsFeed {
 	}
 	for _, c := range cols {
 		feed.Entries = append(feed.Entries, opdsEntry{
-			ID:      "tag:continuum:ebooks:collection:" + c.ID,
+			ID:      "tag:silo:ebooks:collection:" + c.ID,
 			Title:   c.Name,
 			Updated: now.UTC().Format(time.RFC3339),
 			Links: []opdsLink{{
@@ -303,7 +303,7 @@ func (s *Server) handleOPDSCollection(w http.ResponseWriter, r *http.Request) {
 	now := time.Now()
 	feed := opdsFeed{
 		XMLNS:   "http://www.w3.org/2005/Atom",
-		ID:      "tag:continuum:ebooks:opds:collection:" + collectionID,
+		ID:      "tag:silo:ebooks:opds:collection:" + collectionID,
 		Title:   "Collection",
 		Updated: now.UTC().Format(time.RFC3339),
 		Links: []opdsLink{
@@ -317,7 +317,7 @@ func (s *Server) handleOPDSCollection(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		entry := opdsEntry{
-			ID:      "tag:continuum:ebooks:book:" + d.ID,
+			ID:      "tag:silo:ebooks:book:" + d.ID,
 			Title:   d.Title,
 			Summary: d.Description,
 			Updated: now.UTC().Format(time.RFC3339),
@@ -360,7 +360,7 @@ func (s *Server) handleOPDSBookEntry(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	entry := opdsEntry{
-		ID: "tag:continuum:ebooks:book:" + d.ID, Title: d.Title, Summary: d.Description,
+		ID: "tag:silo:ebooks:book:" + d.ID, Title: d.Title, Summary: d.Description,
 		Updated: time.Now().UTC().Format(time.RFC3339),
 	}
 	for _, a := range d.Authors {
@@ -502,7 +502,7 @@ func (s *Server) opdsChallenge(w http.ResponseWriter, r *http.Request) {
 	cfg, _ := s.deps.Store.GetConfig(r.Context())
 	realm := cfg.OpdsRealm
 	if realm == "" {
-		realm = "Continuum Library"
+		realm = "Silo Library"
 	}
 	w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Basic realm=%q`, realm))
 	http.Error(w, "auth required", http.StatusUnauthorized)
@@ -548,17 +548,17 @@ func (s *Server) handleKosyncCreate(w http.ResponseWriter, r *http.Request) {
 	// Compute the kosync username: bare userName for the primary profile,
 	// userName#profileName for named profiles. Profile names come from the
 	// host-injected headers so the SPA can pass them through on registration.
-	userName := r.Header.Get("X-Continuum-User-Name")
+	userName := r.Header.Get("X-Silo-User-Name")
 	if userName == "" {
 		userName = body.Username
 	}
-	profileName := r.Header.Get("X-Continuum-Profile-Name")
+	profileName := r.Header.Get("X-Silo-Profile-Name")
 	kosyncUsername := userName
 	if id.ProfileID != "" && profileName != "" {
 		kosyncUsername = userName + "#" + profileName
 	}
 
-	// Authenticated registration: the continuum user owns the account and may
+	// Authenticated registration: the silo user owns the account and may
 	// rotate their own password (owner-scoped DO UPDATE).
 	if err := s.deps.Store.UpsertKosyncUser(r.Context(), store.KosyncUser{
 		UserID:             id.UserID,

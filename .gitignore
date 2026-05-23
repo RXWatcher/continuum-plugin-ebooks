@@ -1,4 +1,4 @@
-/continuum-plugin-ebooks
+/silo-plugin-ebooks
 *.test
 *.out
 .envrc

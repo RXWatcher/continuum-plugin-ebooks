@@ -16,13 +16,13 @@ import (
 
 	"github.com/hashicorp/go-hclog"
 
-	"github.com/RXWatcher/continuum-plugin-ebooks/internal/backend"
-	"github.com/RXWatcher/continuum-plugin-ebooks/internal/event"
-	"github.com/RXWatcher/continuum-plugin-ebooks/internal/kindle"
-	"github.com/RXWatcher/continuum-plugin-ebooks/internal/koboref"
-	"github.com/RXWatcher/continuum-plugin-ebooks/internal/libsync"
-	"github.com/RXWatcher/continuum-plugin-ebooks/internal/store"
-	"github.com/RXWatcher/continuum-plugin-ebooks/internal/streaming"
+	"github.com/RXWatcher/silo-plugin-ebooks/internal/backend"
+	"github.com/RXWatcher/silo-plugin-ebooks/internal/event"
+	"github.com/RXWatcher/silo-plugin-ebooks/internal/kindle"
+	"github.com/RXWatcher/silo-plugin-ebooks/internal/koboref"
+	"github.com/RXWatcher/silo-plugin-ebooks/internal/libsync"
+	"github.com/RXWatcher/silo-plugin-ebooks/internal/store"
+	"github.com/RXWatcher/silo-plugin-ebooks/internal/streaming"
 )
 
 func decodeBookRef(ref string) (int64, string, bool) {
@@ -259,7 +259,7 @@ func (t *Tasks) KindleSendRetrier(ctx context.Context) error {
 				k.ErrorText+fmt.Sprintf(" | attempt:%d:fetch:%s", attempts, err.Error()), nil)
 			continue
 		}
-		subject := "Your Continuum ebook"
+		subject := "Your Silo ebook"
 		attachName := fmt.Sprintf("%s.%s", k.BookID, k.Format)
 		if err := sender.Send(ctx, k.ToAddress, subject, path, attachName); err != nil {
 			_ = t.Store.UpdateKindleSendStatus(ctx, k.ID, "queued",

@@ -1,4 +1,4 @@
-# continuum.ebooks — docs
+# silo.ebooks — docs
 
 These are the deep docs for the ebooks portal. The top-level [README](../README.md)
 covers what the plugin is and the public knobs; the documents here go further
@@ -35,5 +35,5 @@ helps.
 - Tables and columns referenced are the post-migration shape; see
   [`internal/migrate/files/`](../internal/migrate/files/) for the SQL.
 - "Backend" always means an `ebook_backend.v1` provider plugin —
-  `continuum.bookwarehouse-ebook`, `continuum.ebook-requests`, or
-  `continuum.local-ebooks`. "Portal" is this plugin.
+  `silo.bookwarehouse-ebook`, `silo.ebook-requests`, or
+  `silo.local-ebooks`. "Portal" is this plugin.

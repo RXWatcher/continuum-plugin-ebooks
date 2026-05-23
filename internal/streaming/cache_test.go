@@ -14,9 +14,9 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/RXWatcher/continuum-plugin-ebooks/internal/migrate"
-	"github.com/RXWatcher/continuum-plugin-ebooks/internal/store"
-	"github.com/RXWatcher/continuum-plugin-ebooks/internal/streaming"
+	"github.com/RXWatcher/silo-plugin-ebooks/internal/migrate"
+	"github.com/RXWatcher/silo-plugin-ebooks/internal/store"
+	"github.com/RXWatcher/silo-plugin-ebooks/internal/streaming"
 )
 
 var (
@@ -43,7 +43,7 @@ func cacheDSN() string {
 		return v
 	}
 	return fmt.Sprintf(
-		"postgres://continuum:continuum@localhost:5432/continuum?search_path=%s&sslmode=disable",
+		"postgres://silo:silo@localhost:5432/silo?search_path=%s&sslmode=disable",
 		cacheSchemaName(),
 	)
 }

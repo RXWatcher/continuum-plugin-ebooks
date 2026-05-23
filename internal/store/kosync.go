@@ -39,7 +39,7 @@ type KosyncBookLink struct {
 
 func (s *Store) UpsertKosyncUser(ctx context.Context, u KosyncUser) error {
 	// The DO UPDATE only fires when the conflicting row is owned by the SAME
-	// continuum user, so re-registering / rotating a password works but a
+	// silo user, so re-registering / rotating a password works but a
 	// different user cannot hijack an existing username (the conflict then
 	// updates zero rows). kosync_username stays globally unique because
 	// auth lookup is by username.
@@ -61,7 +61,7 @@ func (s *Store) UpsertKosyncUser(ctx context.Context, u KosyncUser) error {
 
 // CreateKosyncUserStrict inserts a new standalone kosync account and NEVER
 // updates an existing one. It is used by the public, unauthenticated KOReader
-// /kosync/users/create route: there is no continuum identity to authorize a
+// /kosync/users/create route: there is no silo identity to authorize a
 // password change there, so a conflicting username must be rejected rather
 // than have its password silently overwritten by whoever POSTs next
 // (account takeover). Password rotation is only possible via the

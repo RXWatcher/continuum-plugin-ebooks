@@ -1996,7 +1996,7 @@ function IntegrationsTab() {
             <CardDescription>
               Per-user feed credentials for OPDS-capable readers. Revoking a
               token immediately blocks that reader without changing the user's
-              Continuum account.
+              Silo account.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -2038,7 +2038,7 @@ function IntegrationsTab() {
           <CardHeader>
             <CardTitle>KOReader sync users</CardTitle>
             <CardDescription>
-              KOReader progress-sync accounts bound to Continuum users. Removing
+              KOReader progress-sync accounts bound to Silo users. Removing
               one disables sync for that reader profile.
             </CardDescription>
           </CardHeader>
@@ -2351,7 +2351,7 @@ function SettingsTab({
             onChange={(e) =>
               setDraft((d) => ({ ...d, opds_realm: e.target.value }))
             }
-            placeholder="Continuum Library"
+            placeholder="Silo Library"
           />
         </Field>
         <Field
@@ -2390,7 +2390,7 @@ function SettingsTab({
             onChange={(e) =>
               setDraft((d) => ({ ...d, cache_dir: e.target.value }))
             }
-            placeholder="/var/lib/continuum/ebooks-cache"
+            placeholder="/var/lib/silo/ebooks-cache"
           />
         </Field>
         <Field

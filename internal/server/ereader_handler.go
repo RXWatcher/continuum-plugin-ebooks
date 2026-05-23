@@ -14,10 +14,10 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/oklog/ulid/v2"
 
-	"github.com/RXWatcher/continuum-plugin-ebooks/internal/auth"
-	"github.com/RXWatcher/continuum-plugin-ebooks/internal/backend"
-	"github.com/RXWatcher/continuum-plugin-ebooks/internal/kindle"
-	"github.com/RXWatcher/continuum-plugin-ebooks/internal/store"
+	"github.com/RXWatcher/silo-plugin-ebooks/internal/auth"
+	"github.com/RXWatcher/silo-plugin-ebooks/internal/backend"
+	"github.com/RXWatcher/silo-plugin-ebooks/internal/kindle"
+	"github.com/RXWatcher/silo-plugin-ebooks/internal/store"
 )
 
 // User-facing ereader device list + send-ebook-to-device route.
@@ -204,7 +204,7 @@ func (s *Server) handleSendEbookToDevice(w http.ResponseWriter, r *http.Request)
 	sender := kindle.New(smtpCfg)
 	subject := detail.Title
 	if subject == "" {
-		subject = "Sent from Continuum"
+		subject = "Sent from Silo"
 	}
 	if err := sender.Send(r.Context(), device.Email, subject, dst, filename); err != nil {
 		http.Error(w, "send failed: "+err.Error(), http.StatusBadGateway)
